@@ -50,9 +50,9 @@ async def get_message_events(message_events, current_weekday):
 
 @client.event
 async def on_raw_reaction_add(payload):
-    if payload.channel_id in channelsConf['roles_channel'] \
+    if payload.channel_id in channelsConf['roles_channel']['id'] \
             and payload.message_id in channelsConf['roles_channel_messages']\
-            + channelsConf['code_events_reaction_channel_ids']:
+            + channelsConf['code_events_reaction_message_ids']:
         for post in channelsConf['roles_channel_messages']:
             if payload.message_id == post:
                 await assign_role(payload, channelsConf['message_id_to_role_mapping'][post])
