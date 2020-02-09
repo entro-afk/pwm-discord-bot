@@ -52,10 +52,17 @@ async def get_message_events(message_events, current_weekday):
 async def on_raw_reaction_add(payload):
     if payload.channel_id in channelsConf['code_events_reaction_channel_ids'] \
             and payload.message_id in channelsConf['code_events_reaction_message_ids']:
-        guild = client.get_guild(payload.guild_id)
-        role = discord.utils.get(guild.roles, name="CodeEvents")
-        member = guild.get_member(payload.user_id)
-        await member.add_roles(role, reason="CodeEvents")
+        for post in channelsConf['roles_channel_messages']:
+            if payload.message_id == post:
+                await assign_role(payload, channelsConf['message_id_to_role_mapping'][post])
+                break
+
+
+async def assign_role(payload, role_to_add):
+    guild = client.get_guild(payload.guild_id)
+    role = discord.utils.get(guild.roles, name=role_to_add)
+    member = guild.get_member(payload.user_id)
+    await member.add_roles(role, reason=role_to_add)
 
 
 async def get_reacting_users(msg):
