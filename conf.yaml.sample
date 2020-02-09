@@ -1,0 +1,24 @@
+#conf.yaml file
+
+guild_id:
+  - guild id number of server
+
+code_events_reaction_channel_ids:
+  - list of channels to listen for added reactions for CodeEvents role
+
+
+code_events_reaction_message_ids:
+  - list of channels to listen for added reactions for CodeEvents messages
+
+roles_channel:
+  id: notifications-role-channel
+  name: 'test-zone'
+
+roles_channel_messages:
+  - 111111111419931648
+
+message_id_to_role_mapping:
+  111111111419931648: 'CodeEvents'
+  111111122419931648: 'DiscordEvents'
+
+bot_token: sometokenhere123
