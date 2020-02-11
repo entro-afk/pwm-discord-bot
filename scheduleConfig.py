@@ -95,7 +95,7 @@ class ScheduleConfig:
                     'time_end': '23:00'
                 },
                 {
-                    'event_name': 'Guild Beast',
+                    'event_name': 'Guild Escort',
                     'length_type': 'limited',
                     'is_guild_event': True,
                     'time_start': '19:30',
