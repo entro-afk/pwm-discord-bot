@@ -7,6 +7,12 @@ class ScheduleConfig:
         return {
             'Monday': [
                 {
+                    'event_name': 'Bounty Hunter',
+                    'length_type': 'all-day',
+                    'time_start': '10:30',
+                    'time_end': '23:00'
+                },
+                {
                     'event_name': 'Exorcists Trial',
                     'length_type': 'all-day',
                     'time_start': '12:00',
@@ -145,6 +151,12 @@ class ScheduleConfig:
             ],
             'Friday': [
                 {
+                    'event_name': 'Bounty Hunter',
+                    'length_type': 'all-day',
+                    'time_start': '10:30',
+                    'time_end': '23:00'
+                },
+                {
                     'event_name': 'Exorcists Trial',
                     'length_type': 'all-day',
                     'time_start': '12:00',
@@ -241,6 +253,11 @@ class ScheduleConfig:
                     'length_type': 'limited',
                     'is_guild_event': True,
                     'time_start': '21:00 or chosen by guild leader',
+                },
+                {
+                    'event_name': 'Realm War',
+                    'length_type': 'limited',
+                    'time_start': '20:00',
                 },
             ]
         }
