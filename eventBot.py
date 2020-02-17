@@ -132,20 +132,18 @@ async def clean_mismatched_roles(ctx):
                 await member.remove_roles(role, reason=channelsConf['message_id_to_role_mapping'][post])
     pass
 
-
-<<<<<<< HEAD
 @client.event
 async def on_message(message):
     print(message.channel)
     if message.channel.name in channelsConf['event_making_channels'] and message.author.id in channelsConf['hosters']:
-        event_name = find_name_of_event(message.content)
+        event_name = find_name_of_event(message.clean_content)
         create_event(message.clean_content, event_name, duration=1, attendees=None, description=message.clean_content, location=None)
 
 
 def find_name_of_event(content):
     content_lines = content.split("\n")
     i = 0
-    while content_lines[i].startswith('<@!') or content_lines[i] == "":
+    while content_lines[i].startswith('@') or content_lines[i] == "":
         i += 1
     return content_lines[i]
 
@@ -176,7 +174,7 @@ def create_event(start_time_str, summary, duration=1, attendees=None, descriptio
             ],
         },
     }
-    pprint.pprint('''*** %r event added: 
+    pprint.pprint('''*** %r event added:
     With: %s
     Start: %s
     End:   %s''' % (summary.encode('utf-8'),
