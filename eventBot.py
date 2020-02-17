@@ -4,6 +4,25 @@ import datetime, pytz
 import calendar
 from scheduleConfig import ScheduleConfig
 import yaml
+import httplib2
+from apiclient.discovery import build
+from oauth2client.service_account import ServiceAccountCredentials
+import pprint
+import datefinder
+
+scopes = ['https://www.googleapis.com/auth/calendar']
+credentials = ServiceAccountCredentials.from_json_keyfile_name(
+    'quickstart-1581556685975-8959801fbbb6.json', scopes)  # Your json file here
+
+http = httplib2.Http()
+
+http = credentials.authorize(http)
+service = build('calendar', 'v3', http=http)
+httpRequest = service.calendarList().list()
+data = httpRequest.execute()
+pprint.pprint(data)
+
+service = build('calendar', 'v3', credentials=credentials)
 
 fmt = "%Y-%m-%d %H:%M:%S %Z%z"
 
@@ -112,6 +131,60 @@ async def clean_mismatched_roles(ctx):
             if member.id not in user_ids:
                 await member.remove_roles(role, reason=channelsConf['message_id_to_role_mapping'][post])
     pass
+
+
+<<<<<<< HEAD
+@client.event
+async def on_message(message):
+    print(message.channel)
+    if message.channel.name in channelsConf['event_making_channels'] and message.author.id in channelsConf['hosters']:
+        event_name = find_name_of_event(message.content)
+        create_event(message.clean_content, event_name, duration=1, attendees=None, description=message.clean_content, location=None)
+
+
+def find_name_of_event(content):
+    content_lines = content.split("\n")
+    i = 0
+    while content_lines[i].startswith('<@!') or content_lines[i] == "":
+        i += 1
+    return content_lines[i]
+
+
+def create_event(start_time_str, summary, duration=1, attendees=None, description=None, location=None):
+    matches = list(datefinder.find_dates(start_time_str))
+    if len(matches):
+        start_time = matches[0]
+        end_time = start_time + datetime.timedelta(hours=duration)
+
+    event = {
+        'summary': summary,
+        'location': location,
+        'description': description,
+        'start': {
+            'dateTime': start_time.strftime("%Y-%m-%dT%H:%M:%S"),
+            'timeZone': 'America/New_York',
+        },
+        'end': {
+            'dateTime': end_time.strftime("%Y-%m-%dT%H:%M:%S"),
+            'timeZone': 'America/New_York',
+        },
+        'reminders': {
+            'useDefault': False,
+            'overrides': [
+                {'method': 'email', 'minutes': 24 * 60},
+                {'method': 'popup', 'minutes': 10},
+            ],
+        },
+    }
+    pprint.pprint('''*** %r event added: 
+    With: %s
+    Start: %s
+    End:   %s''' % (summary.encode('utf-8'),
+                    attendees, start_time, end_time))
+
+    return service.events().insert(calendarId='mjlpifi9n5pllj790v99rlq61k@group.calendar.google.com',
+                                   body=event).execute()
+
 
 
 # test token
