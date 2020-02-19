@@ -135,7 +135,6 @@ async def clean_mismatched_roles(ctx):
 
 @client.event
 async def on_message(message):
-    print(message.channel)
     if message.channel.name in channelsConf['event_making_channels'] and message.author.id in channelsConf['hosters']:
         event_name = find_name_of_event(message.clean_content)
         emoji_less_text = clean_text([r'<[a-z]*:\w*:\d*>'], message.clean_content)
@@ -143,6 +142,8 @@ async def on_message(message):
             create_event(emoji_less_text, event_name, duration=1, attendees=None, description=message.clean_content, location=None)
         except Exception as err:
             print(err)
+    await client.process_commands(message)
+
 
 def clean_text(rgx_list, text):
     new_text = text
