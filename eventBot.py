@@ -9,6 +9,7 @@ from apiclient.discovery import build
 from oauth2client.service_account import ServiceAccountCredentials
 import pprint
 import datefinder
+import re
 
 scopes = ['https://www.googleapis.com/auth/calendar']
 credentials = ServiceAccountCredentials.from_json_keyfile_name(
@@ -137,8 +138,17 @@ async def on_message(message):
     print(message.channel)
     if message.channel.name in channelsConf['event_making_channels'] and message.author.id in channelsConf['hosters']:
         event_name = find_name_of_event(message.clean_content)
-        create_event(message.clean_content, event_name, duration=1, attendees=None, description=message.clean_content, location=None)
+        emoji_less_text = clean_text([r'<[a-z]*:\w*:\d*>'], message.clean_content)
+        try:
+            create_event(emoji_less_text, event_name, duration=1, attendees=None, description=message.clean_content, location=None)
+        except Exception as err:
+            print(err)
 
+def clean_text(rgx_list, text):
+    new_text = text
+    for rgx_match in rgx_list:
+        new_text = re.sub(rgx_match, '', new_text)
+    return new_text
 
 def find_name_of_event(content):
     content_lines = content.split("\n")
