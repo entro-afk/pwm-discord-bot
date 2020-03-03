@@ -195,6 +195,14 @@ def create_event(start_time_str, summary, duration=1, attendees=None, descriptio
                                    body=event).execute()
 
 
+@client.command()
+async def find_code_events_winners(ctx):
+    async for message in ctx.guild.text_channels[5].history(limit=200):
+        if message.author.id in channelsConf['hosters']:
+            if "Winners:" in message.clean_content:
+                print(message.clean_content.split("\n"))
+                ctx.send(message.clean_content.split("\n")[-1])
+    pass
 
 # test token
 # client.run(channelsConf['test_bot_token'])
