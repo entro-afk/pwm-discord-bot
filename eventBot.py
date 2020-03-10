@@ -54,6 +54,16 @@ async def events(ctx, day=""):
         await ctx.send('Events today\n' + '\n'.join(message_events))
 
 
+@client.command()
+async def find_code_events_winners(ctx):
+    async for message in ctx.guild.text_channels[5].history(limit=200):
+        if message.author.id in channelsConf['hosters']:
+            if "Winners:" in message.clean_content:
+                for msg in message.clean_content.split("\n"):
+                    if "Winners:" in msg:
+                        await ctx.send(msg)
+
+
 async def get_message_events(message_events, current_weekday):
     for event_obj in ScheduleConfig.get_event_listing()[current_weekday]:
         if event_obj['length_type'] == 'all-day':
@@ -138,8 +148,9 @@ async def on_message(message):
     if message.channel.name in channelsConf['event_making_channels'] and message.author.id in channelsConf['hosters']:
         event_name = find_name_of_event(message.clean_content)
         emoji_less_text = clean_text([r'<[a-z]*:\w*:\d*>'], message.clean_content)
+        at_sign_modified_text = emoji_less_text.replace('@', 'at')
         try:
-            create_event(emoji_less_text, event_name, duration=1, attendees=None, description=message.clean_content, location=None)
+            create_event(at_sign_modified_text, event_name, duration=1, attendees=None, description=message.clean_content, location=None)
         except Exception as err:
             print(err)
     await client.process_commands(message)
@@ -195,14 +206,6 @@ def create_event(start_time_str, summary, duration=1, attendees=None, descriptio
                                    body=event).execute()
 
 
-@client.command()
-async def find_code_events_winners(ctx):
-    async for message in ctx.guild.text_channels[5].history(limit=200):
-        if message.author.id in channelsConf['hosters']:
-            if "Winners:" in message.clean_content:
-                print(message.clean_content.split("\n"))
-                ctx.send(message.clean_content.split("\n")[-1])
-    pass
 
 # test token
 # client.run(channelsConf['test_bot_token'])
