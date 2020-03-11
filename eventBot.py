@@ -145,6 +145,10 @@ async def clean_mismatched_roles(ctx):
 
 @client.event
 async def on_message(message):
+    owo_filter_msg = message.clean_content.lower()
+    if owo_filter_msg.startswith("owo"):
+        if owo_filter_msg.split(" ")[1] in ["insult", "kill", "lick", "punch", "kill"]:
+            message.delete()
     if message.channel.name in channelsConf['event_making_channels'] and message.author.id in channelsConf['hosters']:
         event_name = find_name_of_event(message.clean_content)
         emoji_less_text = clean_text([r'<[a-z]*:\w*:\d*>'], message.clean_content)
