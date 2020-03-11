@@ -146,7 +146,6 @@ async def clean_mismatched_roles(ctx):
 @client.event
 async def on_message(message):
     owo_filter_msg = message.clean_content.lower()
-    print(await client.logs_from(message.channel, limit=1))
     if owo_filter_msg.startswith("owo"):
         if owo_filter_msg.split(" ")[1] in ["insult", "kill", "lick", "punch", "kill"]:
             message.delete()
