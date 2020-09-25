@@ -262,18 +262,30 @@ async def get_message_events(message_events, current_weekday):
 
 @client.event
 async def on_raw_reaction_add(payload):
-    if payload.channel_id == channelsConf['roles_channel']['id'] \
-            and payload.message_id in channelsConf['roles_channel_messages'] \
-            + channelsConf['code_events_reaction_message_ids']:
+    if payload.channel_id == channelsConf['roles_channel']['id'] and payload.member.id != client.user.id:
         for post in channelsConf['roles_channel_messages']:
             if payload.message_id == post:
                 await assign_role(payload, channelsConf['message_id_to_role_mapping'][post])
                 break
+        if payload.message_id in channelsConf['role_setup_msg_id']:
+            roles_msg = await client.get_channel(channelsConf['roles_channel']['id']).fetch_message(payload.message_id)
+            roles_rows = roles_msg.embeds[0].description.split("\n")
+            found_pair = None
+            for emoji_role_pair in roles_rows:
+                if payload.emoji.name in emoji_role_pair:
+                    found_pair = emoji_role_pair
+                    break
+            if found_pair:
+                found_role = ' '.join(found_pair.strip().split(" ")[1:])
+                await assign_role(payload, found_role)
 
 
 async def assign_role(payload, role_to_add):
     guild = client.get_guild(payload.guild_id)
     role = discord.utils.get(guild.roles, name=role_to_add)
+    if not role:
+        await guild.create_role(name=role_to_add)
+        role = discord.utils.get(guild.roles, name=role_to_add)
     member = guild.get_member(payload.user_id)
     await member.add_roles(role, reason=role_to_add)
 
@@ -288,11 +300,23 @@ async def get_reacting_users(msg):
 
 @client.event
 async def on_raw_reaction_remove(payload):
-    if payload.channel_id == channelsConf['roles_channel']['id']:
+    if payload.channel_id == channelsConf['roles_channel']['id'] and payload.user_id != client.user.id:
         for post in channelsConf['roles_channel_messages']:
             if payload.message_id == post:
                 await unassign_role(payload, channelsConf['message_id_to_role_mapping'][post])
                 break
+        if payload.message_id in channelsConf['role_setup_msg_id']:
+            roles_msg = await client.get_channel(channelsConf['roles_channel']['id']).fetch_message(payload.message_id)
+            roles_rows = roles_msg.embeds[0].description.split("\n")
+            found_pair = None
+            for emoji_role_pair in roles_rows:
+                if payload.emoji.name in emoji_role_pair:
+                    found_pair = emoji_role_pair
+                    break
+            if found_pair:
+                found_role = ' '.join(found_pair.strip().split(" ")[1:])
+                await unassign_role(payload, found_role)
+
 
 
 async def unassign_role(payload, role_to_remove):
@@ -449,10 +473,11 @@ async def create_list(ctx, *args):
 
 @client.command(pass_context=True, name="rolesetup")
 async def post_roles(ctx, *args):
-
+    title = ' '.join(args)
+    roles_channel = client.get_channel(channelsConf['roles_channel']['id'])
     try:
-        embed = Embed(title=f"Hi everyone, we have new notification roles you can now subscribe to, please react with the following:", description="", color=0x00ff00)
-        await ctx.message.channel.send(embed=embed)
+        embed = Embed(title=title, description="", color=0x00ff00)
+        await roles_channel.send(embed=embed)
     except Exception as err:
         print(err)
 
@@ -460,14 +485,8 @@ async def post_roles(ctx, *args):
 async def add_new_role(ctx, message_id, *args):
     emoji = None
     role_name = None
-    list_emoji_role_pairs = []
     description_msg = []
-    if "," in ' '.join(args):
-        list_emoji_role_pairs = ' '.join(args).split(",")
-    else:
-        emoji_role_pair = args
-        emoji = emoji_role_pair[0].strip()
-        role_name = ' '.join(emoji_role_pair[1:]).strip()
+    list_emoji_role_pairs = ' '.join(args).split(",")
     emoji_role_mapping = []
 
     for pair in list_emoji_role_pairs:
@@ -476,7 +495,9 @@ async def add_new_role(ctx, message_id, *args):
         role_name = ' '.join(emoji_role_pair[1:]).strip()
         emoji_role_mapping.append((emoji, role_name))
         description_msg.append(f"{emoji} {role_name}")
-    roles_msg = await client.get_channel(ctx.channel.id).fetch_message(message_id)
+    roles_msg = await client.get_channel(channelsConf['roles_channel']['id']).fetch_message(message_id)
+    for existing_reaction in roles_msg.reactions:
+        await roles_msg.remove_reaction(existing_reaction, client.user)
     try:
         embed = Embed(title=roles_msg.embeds[0].title, description='\n'.join(description_msg), color=0x00ff00)
         await roles_msg.edit(embed=embed)
@@ -486,6 +507,10 @@ async def add_new_role(ctx, message_id, *args):
                 await roles_msg.add_reaction(emoji_role_tuple[0])
             else:
                 await roles_msg.add_reaction(emoji)
+
+        new_emojis = [emoji_role_pair[0].strip() for emoji_role_pair in emoji_role_mapping]
+
+
     except Exception as err:
         print(err)
 
