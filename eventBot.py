@@ -28,6 +28,13 @@ scopes = ['https://www.googleapis.com/auth/calendar']
 credentials = ServiceAccountCredentials.from_json_keyfile_name(
     'quickstart-1581556685975-8959801fbbb6.json', scopes)  # Your json file here
 
+http = httplib2.Http()
+
+http = credentials.authorize(http)
+service = build('calendar', 'v3', http=http)
+httpRequest = service.calendarList().list()
+data = httpRequest.execute()
+pprint.pprint(data)
 
 service = build('calendar', 'v3', credentials=credentials)
 
