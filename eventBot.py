@@ -10,6 +10,19 @@ from oauth2client.service_account import ServiceAccountCredentials
 import pprint
 import datefinder
 import re
+import redis
+import collections
+import paramiko
+import glob
+import os
+import numpy
+from gyazo import Api
+from google.cloud import vision
+from sqlalchemy import *
+from sqlalchemy.engine import reflection
+from discord import File, Member, Role, PermissionOverwrite, ChannelType, Embed
+
+from sshtunnel import SSHTunnelForwarder
 
 scopes = ['https://www.googleapis.com/auth/calendar']
 credentials = ServiceAccountCredentials.from_json_keyfile_name(
@@ -35,6 +48,9 @@ with open(r'conf.yaml') as file:
 
     print(channelsConf)
 
+gyazo_client = Api(access_token=channelsConf['gyazo_token'])
+r = redis.Redis(host=channelsConf['remote_server']['host'], port=6379)
+
 
 @client.event
 async def on_ready():
@@ -54,6 +70,31 @@ async def events(ctx, day=""):
         await ctx.send('Events today\n' + '\n'.join(message_events))
 
 
+# @client.command()
+# async def party(ctx):
+#     r.lpush('screenshot', 1)
+#     r.brpop('screenshotTaken')
+#     list_of_files = glob.glob(r'/Users/popor/Pictures/BlueStacks/*') # * means all if need specific format then *.csv
+#     latest_file = max(list_of_files, key=os.path.getctime)
+#     print(latest_file)
+#     ssh = paramiko.SSHClient()
+#     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+#     ssh.connect(channelsConf['remote_server']['host'], username='root', password=channelsConf['remote_server']['password'])
+#     sftp = ssh.open_sftp()
+#     print(os.path.basename(latest_file))
+#     sftp.put(latest_file, os.path.join('/root', os.path.basename(latest_file)))
+#     with sftp.open(os.path.join('/root', os.path.basename(latest_file)), 'rb') as f:
+#         image = gyazo_client.upload_image(f)
+#         print(image.to_json())
+#         print(gyazo_client.get_oembed(image.permalink_url))
+#         await ctx.send(image.permalink_url)
+#     sftp.remove(os.path.join('/root', os.path.basename(latest_file)))
+#     sftp.close()
+#     ssh.close()
+
+# r.set('foo', 'bar')
+# print(r.get('foo'))
+
 @client.command()
 async def find_code_events_winners(ctx):
     async for message in ctx.guild.text_channels[5].history(limit=200):
@@ -62,6 +103,144 @@ async def find_code_events_winners(ctx):
                 for msg in message.clean_content.split("\n"):
                     if "Winners:" in msg:
                         await ctx.send(msg)
+
+@client.command()
+async def partystats(ctx, date=""):
+    print(ctx)
+    db_string = "postgres+psycopg2://postgres:{password}@{host}:5432/postgres".format(username='root', password='Iwd34mfb1wrm', host='localhost')
+    print('string--------')
+    print(db_string)
+    db = create_engine(db_string, echo=True)
+    # conn = db.connect()
+    # inspector = inspect(conn)
+
+    # for table_name in inspector.get_table_names():
+    #     for column in inspector.get_columns(table_name):
+    #         print("Column: %s" % column['name'])
+
+
+    # insp = reflection.Inspector.from_engine(conn)
+    # print(insp.get_table_names())
+    metadata = MetaData(schema="pwm")
+    # print(metadata)
+    # table = Table('partyHistory', metadata, autoload=True, autoload_with=conn)
+    # select_st = select([table])
+    # res = conn.execute(select_st)
+    # for _row in res:
+    #     print('my row')
+    #     print(_row)
+    new_words = []
+    orig_words = []
+    guild = client.get_guild(ctx.guild.id)
+    channel = discord.utils.get(guild.text_channels, name='party-history-logs')
+    previous_day = 24
+    hit_previous_day = False
+    async for message in channel.history(limit=500):
+        if hit_previous_day == True:
+            continue
+        if message.clean_content.startswith('https://gyazo.com/'):
+            words = [w.split(",") if "," in w else w for w in detect_text_uri(message.clean_content+'.jpg')]
+            output = []
+
+            def flatten(l):
+                for el in l:
+                    if isinstance(el, collections.Iterable) and not isinstance(el, (str, bytes)):
+                        yield from flatten(el)
+                    else:
+                        yield el
+
+            output = list(flatten(words))
+            for i, text in enumerate(output):
+                if "Twe" in text:
+                    print(text)
+                if ("Recruit" in text and text != "Recruit") or "(Lv." in text or "级" in text or '(Nv.' in text or 'Nv.' in text or "/6" in text or "/12" in text or "/24" in text:
+                    if "级" in text or text.startswith("(Lv.") or text.startswith("(Nv."):
+                        text = output[i-1] + " " + text
+                    new_words.append(text)
+                    if "/6" in text or "/12" in text or "/24" in text:
+                        if message.created_at.day == previous_day:
+                            hit_previous_day = True
+                        new_words.append(message.created_at)
+                    # if "Recruit" in text:
+                    #     with db.connect() as conn:
+                    #         insert_statement = table.insert().values(eventName="Doctor Strange",director="Scott Derrickson", year="2016")
+    print(new_words)
+    print(orig_words)
+    while new_words and isinstance(new_words[0], str) and "Recruit" not in new_words[0]:
+        del new_words[0]
+    while new_words and isinstance(new_words[-1], str):
+        del new_words[-1]
+    i = 0
+    j = 0
+    filled_new_words = []
+    while(j < len(new_words)):
+        text = new_words[j]
+        if isinstance(text, str):
+            if "Recruit" in text and i == 0:
+                filled_new_words.append(text)
+                j += 1
+            elif ("(Lv." in text or "(Lv." in text or "级" in text or '(Nv.' in text or 'Nv.' in text) and i == 1:
+                filled_new_words.append(text)
+                j += 1
+            elif ("/6" in text or "/12" in text or "/24" in text) and i == 2:
+                filled_new_words.append(text)
+                j += 1
+            else:
+                filled_new_words.append(None)
+        elif isinstance(text, datetime.datetime) and i == 3:
+            filled_new_words.append(text)
+            j += 1
+        else:
+            filled_new_words.append(None)
+        i += 1
+        if i == 4:
+            i = 0
+    filled_new_words = list(chunks(filled_new_words, 4))
+    print(new_words)
+    for chunk in filled_new_words:
+        with db.connect() as conn:
+            table = Table('partyHistory', metadata, autoload=True, autoload_with=conn)
+            if isinstance(chunk[0], str):
+                party_leader = re.sub(r'\([^)]*\)', '', chunk[0])
+                party_leader = re.sub(r'\[[^\]]*\]', '', party_leader)
+                party_leader = re.sub("Recruit", '', party_leader)
+                party_leader = re.sub("\\(", '', party_leader)
+                party_leader = re.sub("\\[", '', party_leader)
+                party_leader = re.sub("]", '', party_leader)
+                party_leader = re.sub("\\)", '', party_leader)
+                party_leader = party_leader.strip()
+                if len(party_leader) == 1:
+                    if "]" in party_leader[0]:
+                        party_leader = chunk[0].split("]")[-1]
+                    elif ")" in party_leader[0]:
+                        party_leader = chunk[0].split(")")[-1]
+
+                select_st = select([table]).where(
+                    and_(
+                        table.c.partyleader == party_leader,
+                        table.c.eventname == chunk[1],
+                        table.c.timeformed == chunk[3]
+                    )
+                )
+                res = conn.execute(select_st)
+                if res.first() is None:
+                    party_size = chunk[2] and re.sub("[^0-9]", '', chunk[2].strip().split("/")[0]) or None
+                    if chunk[1] and party_leader and chunk[3]:
+                        insert_statement = table.insert().values(eventname=chunk[1], partyleader=party_leader, partysize=party_size, timeformed=chunk[3])
+                        conn.execute(insert_statement)
+
+# if "Recruit" in text:
+            #     with db.connect() as conn:
+            #         insert_statement = table.insert().values(eventName="Doctor Strange",director="Scott Derrickson", year="2016")
+
+            # guild = client.get_guild(payload.guild_id)
+    # channel = discord.utils.get(guild.text_channels, name=channelsConf['roles_channel']['name'])
+    # msg = await channel.fetch_message(payload.message_id)
+
+def chunks(lst, n):
+    """Yield successive n-sized chunks from lst."""
+    for i in range(0, len(lst), n):
+        yield lst[i:i + n]
 
 
 async def get_message_events(message_events, current_weekday):
@@ -160,6 +339,341 @@ async def on_message(message):
     else:
         await client.process_commands(message)
 
+def delete_list_by_id(list_id):
+    db_string = "postgres+psycopg2://postgres:{password}@{host}:{port}/postgres".format(username='root', password=channelsConf['postgres']['pwd'], host=channelsConf['postgres']['host'], port=channelsConf['postgres']['port'])
+    db = create_engine(db_string)
+    metadata = MetaData(schema="pwm")
+    try:
+        with db.connect() as conn:
+            list_names_table = Table('listNames', metadata, autoload=True, autoload_with=conn)
+            delete_query = f"DELETE FROM pwm.\"listNames\" WHERE id={list_id}"
+            res = conn.execute(delete_query)
+            delete_items_query = f"DELETE FROM pwm.\"listItems\" WHERE \"listID\"={list_id}"
+            res2 = conn.execute(delete_items_query)
+    except Exception as err:
+        print(err)
+        if conn:
+            conn.close()
+        db.dispose()
+
+def clear_list_items(list_id):
+    db_string = "postgres+psycopg2://postgres:{password}@{host}:{port}/postgres".format(username='root', password=channelsConf['postgres']['pwd'], host=channelsConf['postgres']['host'], port=channelsConf['postgres']['port'])
+    db = create_engine(db_string)
+    metadata = MetaData(schema="pwm")
+    try:
+        with db.connect() as conn:
+            delete_items_query = f"DELETE FROM pwm.\"listItems\" WHERE \"listID\"={list_id}"
+            res2 = conn.execute(delete_items_query)
+    except Exception as err:
+        print(err)
+        if conn:
+            conn.close()
+        db.dispose()
+
+@client.command(pass_context=True, name="clearlist")
+@commands.has_any_role('Event Hoster', 'Moderator')
+async def clear_list(ctx, id):
+    list_name = get_list_name_by_id(id)
+    clear_list_items(id)
+    if not get_table_list_items(id, None):
+        embed = Embed(title=f"List #{id} Cleared:", description=list_name, color=0x00ff00)
+        await ctx.message.channel.send(embed=embed)
+
+@client.command(pass_context=True, name="listnames")
+async def get_lists_table(ctx):
+    list_rows = get_lists()
+    description_rows = []
+    for row in list_rows:
+        description_rows.append(f"#{row['list_id']}: {row['list_name']}")
+    embed = Embed(title=f"Existing Lists", description='\n'.join(description_rows), color=0x00ff00)
+    await ctx.message.channel.send(embed=embed)
+
+
+@client.command(pass_context=True, name="delete")
+@commands.has_any_role('Event Hoster', 'Moderator')
+async def delete_list(ctx, id):
+    list_name = get_list_name_by_id(id)
+    delete_list_by_id(id)
+    if not get_list_name_by_id(id):
+        embed = Embed(title=f"List #{id} Deleted:", description=list_name, color=0x00ff00)
+        await ctx.message.channel.send(embed=embed)
+
+
+@client.command(pass_context=True, name="listcreate")
+async def create_list(ctx, *args):
+    list_name = ""
+    items = []
+    if "|" in args:
+        list_name = ' '.join(args).split("|")[0]
+        items = ' '.join(args).split("|")[1]
+    else:
+        list_name = ' '.join(args)
+    list_name = list_name.strip()
+    db_string = "postgres+psycopg2://postgres:{password}@{host}:{port}/postgres".format(username='root', password=channelsConf['postgres']['pwd'], host=channelsConf['postgres']['host'], port=channelsConf['postgres']['port'])
+    db = create_engine(db_string)
+    metadata = MetaData(schema="pwm")
+
+    try:
+        with db.connect() as conn:
+            list_names_table = Table('listNames', metadata, autoload=True, autoload_with=conn)
+            insert_statement = list_names_table.insert().values(listName=list_name)
+            res = conn.execute(insert_statement)
+            table_id = res.inserted_primary_key[0]
+
+
+            list_items_table = Table('listItems', metadata, autoload=True, autoload_with=conn)
+            select_st = select([list_items_table])
+            lowest_position_number = 0
+
+            for item in items and items.split(","):
+                if not lowest_position_number:
+                    lowest_position_number = 1000
+                else:
+                    lowest_position_number = (lowest_position_number/1000 + 1) * 1000
+                insert_statement = list_items_table.insert().values(itemName=item.strip(), listID=table_id, position=lowest_position_number)
+                conn.execute(insert_statement)
+            select_st = select([list_items_table]).where(list_items_table.c.listID == table_id)
+            res = conn.execute(select_st)
+            list_items = []
+            for row in res:
+                list_items.append("▫️" + row.itemName)
+        embed = Embed(title=f"List #{table_id} Created", description='\n'.join(list_items), color=0x00ff00)
+        embed.add_field(name='List ID', value=f"{table_id}", inline=True)
+        embed.add_field(name='List Name', value=f"{list_name}", inline=True)
+        await ctx.message.channel.send(embed=embed)
+    except Exception as err:
+        print(err)
+        if conn:
+            conn.close()
+        db.dispose()
+
+@client.command(pass_context=True, name="rolesetup")
+async def post_roles(ctx, *args):
+
+    try:
+        embed = Embed(title=f"Hi everyone, we have new notification roles you can now subscribe to, please react with the following:", description="", color=0x00ff00)
+        await ctx.message.channel.send(embed=embed)
+    except Exception as err:
+        print(err)
+
+@client.command(pass_context=True, name="newrole")
+async def add_new_role(ctx, message_id, *args):
+    emoji = None
+    role_name = None
+    list_emoji_role_pairs = []
+    description_msg = []
+    if "," in ' '.join(args):
+        list_emoji_role_pairs = ' '.join(args).split(",")
+    else:
+        emoji_role_pair = args
+        emoji = emoji_role_pair[0].strip()
+        role_name = ' '.join(emoji_role_pair[1:]).strip()
+    emoji_role_mapping = []
+
+    for pair in list_emoji_role_pairs:
+        emoji_role_pair = pair.strip().split(" ")
+        emoji = emoji_role_pair[0].strip()
+        role_name = ' '.join(emoji_role_pair[1:]).strip()
+        emoji_role_mapping.append((emoji, role_name))
+        description_msg.append(f"{emoji} {role_name}")
+    roles_msg = await client.get_channel(ctx.channel.id).fetch_message(message_id)
+    try:
+        embed = Embed(title=roles_msg.embeds[0].title, description='\n'.join(description_msg), color=0x00ff00)
+        await roles_msg.edit(embed=embed)
+        for emoji_role_tuple in emoji_role_mapping:
+            emoji = discord.utils.get(client.emojis, name=emoji_role_tuple[0])
+            if not emoji:
+                await roles_msg.add_reaction(emoji_role_tuple[0])
+            else:
+                await roles_msg.add_reaction(emoji)
+    except Exception as err:
+        print(err)
+
+@client.command(pass_context=True, name="getlist")
+async def get_list(ctx, *args):
+    list_name = None
+    list_id = None
+    items = []
+    potential_name_or_id = ' '.join(args).split("|")[0]
+    if potential_name_or_id.strip().isnumeric():
+        list_id = potential_name_or_id
+    else:
+        list_name = potential_name_or_id
+
+
+    try:
+        list_items = []
+        table_list_items = get_table_list_items(list_id, list_name)
+        for item_name in table_list_items:
+            list_items.append("▫️" + item_name)
+        if list_id:
+            list_name = get_list_name_by_id(list_id)
+        embed = Embed(title=f"Here is the list.", description=f"{list_name}:\n" + '\n'.join(list_items), color=0x00ff00)
+        await ctx.message.channel.send(embed=embed)
+    except Exception as err:
+        print(err)
+
+def get_lists():
+    db_string = "postgres+psycopg2://postgres:{password}@{host}:{port}/postgres".format(username='root', password=channelsConf['postgres']['pwd'], host=channelsConf['postgres']['host'], port=channelsConf['postgres']['port'])
+    db = create_engine(db_string)
+    metadata = MetaData(schema="pwm")
+    try:
+        with db.connect() as conn:
+            lists = []
+            list_names_table = Table('listNames', metadata, autoload=True, autoload_with=conn)
+            select_st = select([list_names_table])
+            res = conn.execute(select_st)
+            for row in res:
+                list_name = row[1]
+                lists.append({
+                    "list_id": row[0],
+                    "list_name" : list_name,
+                })
+            return lists
+    except Exception as err:
+        print(err)
+        if conn:
+            conn.close()
+        db.dispose()
+
+
+@client.command(pass_context=True, name="sendping")
+async def send_ping_from_list(ctx, *args):
+    list_name = None
+    list_id = None
+    items = []
+    list_name = ' '.join(args).split("|")[0]
+    if list_name.strip().isnumeric():
+        list_id = list_name
+    tags_in_list = get_table_list_items(list_id, list_name)
+    if not list_name:
+        list_name = get_list_name_by_id(list_id)
+    singer = client.get_user(int(re.sub("[^0-9]", "", list_name)))
+    for tag in tags_in_list:
+        tag_id = int(re.sub("[^0-9]", "", tag))
+        ping_receiver = client.get_user(tag_id)
+        embed = Embed(title=f"{singer.name} is about to sing", description='Please join us at discord.gg/nQAAEx8',
+                      color=0x00ff00)
+        await ping_receiver.send(embed=embed)
+
+
+def get_list_name_by_id(list_id):
+    db_string = "postgres+psycopg2://postgres:{password}@{host}:{port}/postgres".format(username='root', password=channelsConf['postgres']['pwd'], host=channelsConf['postgres']['host'], port=channelsConf['postgres']['port'])
+    db = create_engine(db_string)
+    metadata = MetaData(schema="pwm")
+    try:
+        with db.connect() as conn:
+            list_names_table = Table('listNames', metadata, autoload=True, autoload_with=conn)
+            select_st = select([list_names_table]).where(list_names_table.c.id == list_id)
+            res = conn.execute(select_st)
+            for row in res:
+                list_name = row[1]
+            return list_name
+    except Exception as err:
+        print(err)
+        if conn:
+            conn.close()
+        db.dispose()
+
+
+def get_table_list_items(list_id, list_name):
+    db_string = "postgres+psycopg2://postgres:{password}@{host}:{port}/postgres".format(username='root', password=channelsConf['postgres']['pwd'], host=channelsConf['postgres']['host'], port=channelsConf['postgres']['port'])
+    db = create_engine(db_string)
+    metadata = MetaData(schema="pwm")
+    try:
+        with db.connect() as conn:
+            list_names_table = Table('listNames', metadata, autoload=True, autoload_with=conn)
+            if list_id:
+                condition = list_names_table.c.id == list_id
+            else:
+                condition = list_names_table.c.listName == list_name
+            select_st = select([list_names_table]).where(condition)
+            res = conn.execute(select_st)
+            for row in res:
+                list_name = row[1]
+                list_id = row[0]
+            list_items_table = Table('listItems', metadata, autoload=True, autoload_with=conn)
+            select_st = select([list_items_table]).where(list_items_table.c.listID == list_id)
+            res = conn.execute(select_st)
+            table_list_items = []
+            for row in res:
+                table_list_items.append(row.itemName)
+            return table_list_items
+    except Exception as err:
+        print(err)
+        if conn:
+            conn.close()
+        db.dispose()
+
+
+@client.command(pass_context=True, name="affirm")
+async def create_affirmation(ctx, *args):
+    from_name = ""
+    title = ' '.join(args)
+    message = ""
+    if "|" in args:
+        title = ' '.join(args).split("|")[0].strip()
+        message = ' '.join(args).split("|")[1].strip()
+
+    if len(' '.join(args).split("|")) > 2:
+        from_name = ' '.join(args).split("|")[2].strip()
+
+    embed = Embed(title=title, description=message, color=0x9bcaee)
+    if from_name:
+        embed.set_footer(text=f"— {from_name}")
+    if ctx.message.attachments:
+        embed.set_image(url=ctx.message.attachments[0].url)
+    await ctx.message.channel.send(embed=embed)
+
+@client.command(pass_context=True, name="add")
+async def add_to_list(ctx, *args):
+    list_id = None
+    list_name = ""
+
+    items = []
+    list_name = ' '.join(args).split("|")[0]
+    items = ' '.join(args).split("|")[1]
+
+    if list_name.strip().isnumeric():
+        list_id = int(list_name.strip())
+
+    db_string = "postgres+psycopg2://postgres:{password}@{host}:{port}/postgres".format(username='root', password=channelsConf['postgres']['pwd'], host=channelsConf['postgres']['host'], port=channelsConf['postgres']['port'])
+    db = create_engine(db_string)
+    metadata = MetaData(schema="pwm")
+
+    try:
+        with db.connect() as conn:
+            list_names_table = Table('listNames', metadata, autoload=True, autoload_with=conn)
+            if list_id:
+                condition = list_names_table.c.id == list_id
+            else:
+                condition = list_names_table.c.listName == list_name
+            select_st = select([list_names_table]).where(condition)
+            res = conn.execute(select_st)
+            list = [{column: value for column, value in rowproxy.items()} for rowproxy in res][0]
+
+
+            list_items_table = Table('listItems', metadata, autoload=True, autoload_with=conn)
+            select_st = select([list_items_table]).order_by(list_items_table.c.position.asc())
+            lowest_position_number = 0
+            for item in items.split(","):
+                insert_statement = list_items_table.insert().values(itemName=item.strip(), listID=list['id'], position= lowest_position_number)
+                conn.execute(insert_statement)
+            select_st = select([list_items_table]).where(list_items_table.c.listID == list['id'])
+            res = conn.execute(select_st)
+            list_items = []
+            for row in res:
+                list_items.append("▫️" + row.itemName)
+        embed = Embed(title=f"Added to List #{list_name}", description=f"{list['listName']}:\n" + '\n'.join(list_items), color=0x00ff00)
+        await ctx.message.channel.send(embed=embed)
+    except Exception as err:
+        print(err)
+        if conn:
+            conn.close()
+        db.dispose()
+
+
+
 
 def clean_text(rgx_list, text):
     new_text = text
@@ -209,6 +723,35 @@ def create_event(start_time_str, summary, duration=1, attendees=None, descriptio
 
     return service.events().insert(calendarId='mjlpifi9n5pllj790v99rlq61k@group.calendar.google.com',
                                    body=event).execute()
+
+
+
+def detect_text_uri(uri):
+    """Detects text in the file."""
+    # client = vision.ImageAnnotatorClient()
+    client = vision.ImageAnnotatorClient.from_service_account_json(r'/Users/popor/PycharmProjects/testDiscordBot.py/pwm-discord-bot/quickstart-1581556685975-8959801fbbb6.json')
+
+
+    image = vision.types.Image()
+    image.source.image_uri = uri
+    response = client.text_detection(image=image)
+    texts = response.text_annotations
+
+    return texts and texts[0].description.split("\n") or []
+    # for text in texts:
+    #     return ('"{}"'.format(text.description))
+
+        # vertices = (['({},{})'.format(vertex.x, vertex.y)
+        #             for vertex in text.bounding_poly.vertices])
+        #
+        # print('bounds: {}'.format(','.join(vertices)))
+
+    # if response.error.message:
+    #     raise Exception(
+    #         '{}\nFor more info on error messages, check: '
+    #         'https://cloud.google.com/apis/design/errors'.format(
+    #             response.error.message))
+
 
 
 
