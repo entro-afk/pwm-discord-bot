@@ -566,11 +566,11 @@ async def post_roles(ctx, *args):
         print(err)
 
 @client.command(pass_context=True, name="newrole")
-async def add_new_role(ctx, message_id, *args):
+async def add_new_role(ctx, channel_id, message_id, *args):
     description_msg = []
     list_emoji_role_pairs = re.sub('\n', ",", ' '.join(args)).split(",")
     emoji_role_mapping = []
-
+    channel = client.get_channel(int(channel_id))
     for pair in list_emoji_role_pairs:
         emoji_role_pair = pair.strip().split(" ")
         emoji = emoji_role_pair[0].strip()
@@ -581,8 +581,8 @@ async def add_new_role(ctx, message_id, *args):
         role_name = role_name if '|' not in role_name else role_name.split("|")[0].strip()
         emoji_role_mapping.append((emoji, role_name))
         description_msg.append(f"{emoji} {role_name}{role_description}")
-    if ctx.message.channel.name == 'fanclub-subscriptions':
-        roles_msg = await client.get_channel(ctx.message.channel.id).fetch_message(message_id)
+    if channel.name == 'fanclub-subscriptions':
+        roles_msg = await channel.fetch_message(message_id)
     else:
         roles_msg = await client.get_channel(channelsConf['roles_channel']['id']).fetch_message(message_id)
     try:
