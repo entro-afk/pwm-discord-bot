@@ -292,7 +292,7 @@ async def on_raw_reaction_add(payload):
                 list_names = [listy['list_name'] for listy in get_lists()]
                 if list_name not in list_names:
                     create_db_list(list_name, '', [])
-                add_to_db_list(list_id, list_name, f"<@{payload.member.id}>", [])
+                add_to_db_list(list_id, list_name, f"<@!{payload.member.id}>", [])
 
 
 
@@ -579,7 +579,6 @@ async def add_new_role(ctx, channel_id, message_id, *args):
         if '|' in role_name:
             role_description = f" [{role_name.split('|')[1].strip()}]"
         role_name = role_name if '|' not in role_name else role_name.split("|")[0].strip()
-        role_name =  re.sub('<@!', "<@", role_name)
         emoji_role_mapping.append((emoji, role_name))
         description_msg.append(f"{emoji} {role_name}{role_description}")
     if channel.name == 'fanclub-subscriptions':
