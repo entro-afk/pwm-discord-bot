@@ -12,6 +12,7 @@ import datefinder
 import re
 import redis
 import collections
+import math
 import paramiko
 import glob
 import os
@@ -476,10 +477,19 @@ async def clear_list(ctx, id):
 async def get_lists_table(ctx):
     list_rows = get_lists()
     description_rows = []
+
     for row in list_rows:
         description_rows.append(f"#{row['list_id']}: {row['list_name']}")
-    embed = Embed(title=f"Existing Lists", description='\n'.join(description_rows), color=0x00ff00)
-    await ctx.message.channel.send(embed=embed)
+    max_n = math.ceil(len(description_rows) / 20)
+    embed_sets = []
+    i = 0
+    while i < max_n:
+        begin_num = i*20
+        embed = Embed(title=f"Existing Lists", description='\n'.join(description_rows[begin_num:begin_num+20]), color=0x00ff00)
+        embed_sets.append(embed)
+        i += 1
+    for embed in embed_sets:
+        await ctx.message.channel.send(embed=embed)
 
 
 @client.command(pass_context=True, name="delete")
