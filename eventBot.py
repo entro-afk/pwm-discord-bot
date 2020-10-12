@@ -262,22 +262,37 @@ async def get_message_events(message_events, current_weekday):
 
 @client.event
 async def on_raw_reaction_add(payload):
-    if payload.channel_id == channelsConf['roles_channel']['id'] and payload.member.id != client.user.id:
+    channel = client.get_channel(payload.channel_id)
+    if payload.channel_id == channelsConf['roles_channel']['id'] and payload.member.id != client.user.id or channel.name == 'fanclub-subscriptions':
         for post in channelsConf['roles_channel_messages']:
             if payload.message_id == post:
                 await assign_role(payload, channelsConf['message_id_to_role_mapping'][post])
                 break
-        if payload.message_id in channelsConf['role_setup_msg_id']:
-            roles_msg = await client.get_channel(channelsConf['roles_channel']['id']).fetch_message(payload.message_id)
-            roles_rows = roles_msg.embeds[0].description.split("\n")
-            found_pair = None
-            for emoji_role_pair in roles_rows:
-                if payload.emoji.name in emoji_role_pair:
-                    found_pair = emoji_role_pair
-                    break
-            if found_pair:
-                found_role = ' '.join(found_pair.strip().split(" ")[1:])
+        if channel.name == 'fanclub-subscriptions':
+            roles_msg = await client.get_channel(payload.channel_id).fetch_message(payload.message_id)
+        else:
+            roles_msg = client.get_channel(channelsConf['roles_channel']['id']).fetch_message(payload.message_id)
+        roles_rows = roles_msg.embeds[0].description.split("\n")
+        found_pair = None
+        for emoji_role_pair in roles_rows:
+            if payload.emoji.name in emoji_role_pair:
+                found_pair = emoji_role_pair
+                break
+        if found_pair:
+            found_role = ' '.join(found_pair.strip().split(" ")[1:])
+            if channel.name != 'fanclub-subscriptions':
                 await assign_role(payload, found_role)
+            else:
+                list_id = None
+                found_role = ' '.join(found_pair.strip().split(" ")[1:])
+                if '[' in found_role:
+                    found_role = found_role.split("[")[0].strip()
+                list_name = f"{found_role} Fanclub"
+                list_names = [listy['list_name'] for listy in get_lists()]
+                if list_name not in list_names:
+                    create_db_list(list_name, '', [])
+                add_to_db_list(list_id, list_name, f"<@!{payload.member.id}>", [])
+
 
 
 async def assign_role(payload, role_to_add):
@@ -288,6 +303,7 @@ async def assign_role(payload, role_to_add):
         role = discord.utils.get(guild.roles, name=role_to_add)
     member = guild.get_member(payload.user_id)
     await member.add_roles(role, reason=role_to_add)
+
 
 
 async def get_reacting_users(msg):
@@ -346,6 +362,58 @@ async def clean_mismatched_roles(ctx):
                 await member.remove_roles(role, reason=channelsConf['message_id_to_role_mapping'][post])
     pass
 
+@client.command(pass_context=True, name='giverole')
+async def assign_role_to_member(guild_id, member: Member, role_to_add):
+    guild = client.get_guild(guild_id)
+    role = discord.utils.get(guild.roles, name=role_to_add)
+    if not role:
+        await guild.create_role(name=role_to_add)
+        role = discord.utils.get(guild.roles, name=role_to_add)
+    member = guild.get_member(member.id)
+    await member.add_roles(role, reason=role_to_add)
+
+@client.command(pass_context=True, name='removerole')
+async def unassign_role_from_member(guild_id, member: Member, role_to_remove):
+    member_has_role_to_be_removed = discord.utils.get(member.roles, name=role_to_remove)
+    if member_has_role_to_be_removed:
+        guild = client.get_guild(guild_id)
+        role = discord.utils.get(guild.roles, name=role_to_remove)
+        member = guild.get_member(member.id)
+        await member.remove_roles(role, reason=role_to_remove)
+
+
+@client.command(pass_context=True, name='giveallroleexcept')
+async def give_everyone_this_role_except(ctx, role_name):
+    roles_mentioned = ctx.message.role_mentions[1:] if role_name.startswith('<@') else ctx.message.role_mentions
+    users_mentioned = ctx.message.mentions
+    for role in roles_mentioned:
+        for role_member in role.members:
+            users_mentioned.append(role_member)
+    for member in ctx.guild.members:
+        marker_for_recent_people = datetime.datetime(2020, 1, 8)
+        if member not in users_mentioned and member.joined_at > marker_for_recent_people:
+            await assign_role_to_member(ctx.guild.id, member, role_name)
+            print('Gave role to ', member.display_name)
+        if member in users_mentioned:
+            await unassign_role_from_member(ctx.guild.id, member, role_name)
+            print('Tried to remove role from ', member.display_name)
+
+@client.command(pass_context=True, name='color')
+async def give_color(ctx, role_name):
+    roles_mentioned = ctx.message.role_mentions[1:] if role_name.startswith('<@') else ctx.message.role_mentions
+    users_mentioned = ctx.message.mentions
+    for role in roles_mentioned:
+        for role_member in role.members:
+            users_mentioned.append(role_member)
+    for member in ctx.guild.members:
+        marker_for_recent_people = datetime.datetime(2020, 1, 8)
+        if member not in users_mentioned and member.joined_at > marker_for_recent_people:
+            await assign_role_to_member(ctx.guild.id, member, role_name)
+            print('Gave role to ', member.display_name)
+        if member in users_mentioned:
+            await unassign_role_from_member(ctx.guild.id, member, role_name)
+            print('Tried to remove role from ', member.display_name)
+
 @client.event
 async def on_message(message):
     owo_filter_msg = message.clean_content.lower()
@@ -379,6 +447,7 @@ def delete_list_by_id(list_id):
         if conn:
             conn.close()
         db.dispose()
+
 
 def clear_list_items(list_id):
     db_string = "postgres+psycopg2://postgres:{password}@{host}:{port}/postgres".format(username='root', password=channelsConf['postgres']['pwd'], host=channelsConf['postgres']['host'], port=channelsConf['postgres']['port'])
@@ -433,11 +502,21 @@ async def create_list(ctx, *args):
     else:
         list_name = ' '.join(args)
     list_name = list_name.strip()
-    db_string = "postgres+psycopg2://postgres:{password}@{host}:{port}/postgres".format(username='root', password=channelsConf['postgres']['pwd'], host=channelsConf['postgres']['host'], port=channelsConf['postgres']['port'])
-    db = create_engine(db_string)
-    metadata = MetaData(schema="pwm")
+    list_items = []
+    table_id = create_db_list(list_name, items, list_items)
+    embed = Embed(title=f"List #{table_id} Created", description='\n'.join(list_items), color=0x00ff00)
+    embed.add_field(name='List ID', value=f"{table_id}", inline=True)
+    embed.add_field(name='List Name', value=f"{list_name}", inline=True)
+    await ctx.message.channel.send(embed=embed)
 
+
+def create_db_list(list_name, items, list_items):
     try:
+        db_string = "postgres+psycopg2://postgres:{password}@{host}:{port}/postgres".format(username='root', password=
+        channelsConf['postgres']['pwd'], host=channelsConf['postgres']['host'], port=channelsConf['postgres']['port'])
+        db = create_engine(db_string)
+        metadata = MetaData(schema="pwm")
+
         with db.connect() as conn:
             list_names_table = Table('listNames', metadata, autoload=True, autoload_with=conn)
             insert_statement = list_names_table.insert().values(listName=list_name)
@@ -450,21 +529,13 @@ async def create_list(ctx, *args):
             lowest_position_number = 0
 
             for item in items and items.split(","):
-                if not lowest_position_number:
-                    lowest_position_number = 1000
-                else:
-                    lowest_position_number = (lowest_position_number/1000 + 1) * 1000
                 insert_statement = list_items_table.insert().values(itemName=item.strip(), listID=table_id, position=lowest_position_number)
                 conn.execute(insert_statement)
             select_st = select([list_items_table]).where(list_items_table.c.listID == table_id)
             res = conn.execute(select_st)
-            list_items = []
             for row in res:
                 list_items.append("▫️" + row.itemName)
-        embed = Embed(title=f"List #{table_id} Created", description='\n'.join(list_items), color=0x00ff00)
-        embed.add_field(name='List ID', value=f"{table_id}", inline=True)
-        embed.add_field(name='List Name', value=f"{list_name}", inline=True)
-        await ctx.message.channel.send(embed=embed)
+            return table_id
     except Exception as err:
         print(err)
         if conn:
@@ -474,7 +545,10 @@ async def create_list(ctx, *args):
 @client.command(pass_context=True, name="rolesetup")
 async def post_roles(ctx, *args):
     title = ' '.join(args)
-    roles_channel = client.get_channel(channelsConf['roles_channel']['id'])
+    if ctx.message.channel.name == 'fanclub-subscriptions':
+        roles_channel = ctx.message.channel
+    else:
+        roles_channel = client.get_channel(channelsConf['roles_channel']['id'])
     try:
         embed = Embed(title=title, description="", color=0x00ff00)
         await roles_channel.send(embed=embed)
@@ -483,21 +557,24 @@ async def post_roles(ctx, *args):
 
 @client.command(pass_context=True, name="newrole")
 async def add_new_role(ctx, message_id, *args):
-    emoji = None
-    role_name = None
     description_msg = []
-    list_emoji_role_pairs = ' '.join(args).split(",")
+    list_emoji_role_pairs = re.sub('\n', ",", ' '.join(args)).split(",")
     emoji_role_mapping = []
 
     for pair in list_emoji_role_pairs:
         emoji_role_pair = pair.strip().split(" ")
         emoji = emoji_role_pair[0].strip()
         role_name = ' '.join(emoji_role_pair[1:]).strip()
+        role_description = ""
+        if '|' in role_name:
+            role_description = f" [{role_name.split('|')[1].strip()}]"
+        role_name = role_name if '|' not in role_name else role_name.split("|")[0].strip()
         emoji_role_mapping.append((emoji, role_name))
-        description_msg.append(f"{emoji} {role_name}")
-    roles_msg = await client.get_channel(channelsConf['roles_channel']['id']).fetch_message(message_id)
-    for existing_reaction in roles_msg.reactions:
-        await roles_msg.remove_reaction(existing_reaction, client.user)
+        description_msg.append(f"{emoji} {role_name}{role_description}")
+    if ctx.message.channel.name == 'fanclub-subscriptions':
+        roles_msg = await client.get_channel(ctx.message.channel.id).fetch_message(message_id)
+    else:
+        roles_msg = await client.get_channel(channelsConf['roles_channel']['id']).fetch_message(message_id)
     try:
         embed = Embed(title=roles_msg.embeds[0].title, description='\n'.join(description_msg), color=0x00ff00)
         await roles_msg.edit(embed=embed)
@@ -507,8 +584,6 @@ async def add_new_role(ctx, message_id, *args):
                 await roles_msg.add_reaction(emoji_role_tuple[0])
             else:
                 await roles_msg.add_reaction(emoji)
-
-        new_emojis = [emoji_role_pair[0].strip() for emoji_role_pair in emoji_role_mapping]
 
 
     except Exception as err:
@@ -631,24 +706,49 @@ def get_table_list_items(list_id, list_name):
         db.dispose()
 
 
-@client.command(pass_context=True, name="affirm")
-async def create_affirmation(ctx, *args):
-    from_name = ""
-    title = ' '.join(args)
-    message = ""
-    if "|" in args:
-        title = ' '.join(args).split("|")[0].strip()
-        message = ' '.join(args).split("|")[1].strip()
+async def emoji_success_feedback(message):
+    emoji = discord.utils.get(client.emojis, name='yes')
+    await message.add_reaction(emoji)
 
-    if len(' '.join(args).split("|")) > 2:
-        from_name = ' '.join(args).split("|")[2].strip()
+@client.command(pass_context=True, name="affirms")
+async def create_affirmation(ctx):
+    from_name = ""
+    stripped_content = ctx.message.content.lstrip('!affirm ').replace()
+    title = stripped_content
+    message = ""
+    affirm_channel = discord.utils.get(ctx.guild.text_channels, name='affirmations-and-salutes')
+    if "|" in stripped_content:
+        title = stripped_content.split("|")[0].strip()
+        message = stripped_content.split("|")[1].strip()
+
+    if len(stripped_content.split("|")) > 2:
+        from_name = stripped_content.split("|")[2].strip()
 
     embed = Embed(title=title, description=message, color=0x9bcaee)
     if from_name:
         embed.set_footer(text=f"— {from_name}")
     if ctx.message.attachments:
         embed.set_image(url=ctx.message.attachments[0].url)
+
     await ctx.message.channel.send(embed=embed)
+
+@client.command(pass_context=True, name="sendletter")
+async def mail_affirmation(ctx):
+    if ctx.message.channel.type == discord.ChannelType.private:
+        message = ctx.message.clean_content.lstrip('!sendletter ')
+        author = 'anon'
+        guild = client.get_guild(channelsConf['guild_id'])
+        channel = discord.utils.get(guild.text_channels, name='affirmations-mail')
+        if message.lower().startswith('signed'):
+            author = ctx.author.name + f' ({ctx.author.id})'
+            message = message.lstrip('signed')
+        embed = Embed(title=f"From {author}", description=message, color=0xb83fe4)
+        await channel.send(embed=embed)
+        await emoji_success_feedback(ctx.message)
+        for atchment in ctx.message.attachments:
+            embed.set_image(url=atchment.url)
+            await channel.send(embed=embed)
+            await emoji_success_feedback(ctx.message)
 
 @client.command(pass_context=True, name="add")
 async def add_to_list(ctx, *args):
@@ -659,9 +759,17 @@ async def add_to_list(ctx, *args):
     list_name = ' '.join(args).split("|")[0]
     items = ' '.join(args).split("|")[1]
 
-    if list_name.strip().isnumeric():
-        list_id = int(list_name.strip())
+    try:
+        if list_name.strip().isnumeric():
+            list_id = int(list_name.strip())
+        list_items = []
+        list = add_to_db_list(list_id, list_name.strip(), items, list_items)
+        embed = Embed(title=f"Added to List #{list['id']}", description=f"{list['listName']}:\n" + '\n'.join(list_items), color=0x00ff00)
+        await ctx.message.channel.send(embed=embed)
+    except Exception as err:
+        print(err)
 
+def add_to_db_list(list_id, list_name, items, list_items):
     db_string = "postgres+psycopg2://postgres:{password}@{host}:{port}/postgres".format(username='root', password=channelsConf['postgres']['pwd'], host=channelsConf['postgres']['host'], port=channelsConf['postgres']['port'])
     db = create_engine(db_string)
     metadata = MetaData(schema="pwm")
@@ -686,11 +794,10 @@ async def add_to_list(ctx, *args):
                 conn.execute(insert_statement)
             select_st = select([list_items_table]).where(list_items_table.c.listID == list['id'])
             res = conn.execute(select_st)
-            list_items = []
             for row in res:
                 list_items.append("▫️" + row.itemName)
-        embed = Embed(title=f"Added to List #{list_name}", description=f"{list['listName']}:\n" + '\n'.join(list_items), color=0x00ff00)
-        await ctx.message.channel.send(embed=embed)
+            return list
+
     except Exception as err:
         print(err)
         if conn:
