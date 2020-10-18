@@ -656,8 +656,11 @@ async def send_ping_from_list(ctx, *args):
     if list_name.strip().isnumeric():
         list_id = list_name
     tags_in_list = get_table_list_items(list_id, list_name)
-    if not list_name:
+    if list_id:
         list_name = get_list_name_by_id(list_id)
+    if not list_id:
+        if "fanclub" not in list_name.lower():
+            list_name = list_name.strip() + " Fanclub"
     singer = client.get_user(int(re.sub("[^0-9]", "", list_name)))
     for tag in tags_in_list:
         tag_id = int(re.sub("[^0-9]", "", tag))
