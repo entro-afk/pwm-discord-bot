@@ -667,7 +667,8 @@ async def send_ping_from_list(ctx, *args):
         ping_receiver = client.get_user(tag_id)
         embed = Embed(title=f"{singer.name} is about to sing", description='Please join us at discord.gg/nQAAEx8',
                       color=0x00ff00)
-        await ping_receiver.send(embed=embed)
+        if tag_id != client.user.id:
+            await ping_receiver.send(embed=embed)
 
 
 def get_list_name_by_id(list_id):
