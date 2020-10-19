@@ -399,22 +399,6 @@ async def give_everyone_this_role_except(ctx, role_name):
             await unassign_role_from_member(ctx.guild.id, member, role_name)
             print('Tried to remove role from ', member.display_name)
 
-@client.command(pass_context=True, name='color')
-async def give_color(ctx, role_name):
-    roles_mentioned = ctx.message.role_mentions[1:] if role_name.startswith('<@') else ctx.message.role_mentions
-    users_mentioned = ctx.message.mentions
-    for role in roles_mentioned:
-        for role_member in role.members:
-            users_mentioned.append(role_member)
-    for member in ctx.guild.members:
-        marker_for_recent_people = datetime.datetime(2020, 1, 8)
-        if member not in users_mentioned and member.joined_at > marker_for_recent_people:
-            await assign_role_to_member(ctx.guild.id, member, role_name)
-            print('Gave role to ', member.display_name)
-        if member in users_mentioned:
-            await unassign_role_from_member(ctx.guild.id, member, role_name)
-            print('Tried to remove role from ', member.display_name)
-
 @client.event
 async def on_message(message):
     owo_filter_msg = message.clean_content.lower()
@@ -564,6 +548,20 @@ async def post_roles(ctx, *args):
         await roles_channel.send(embed=embed)
     except Exception as err:
         print(err)
+
+@client.command(pass_context=True, name="color")
+async def set_color(ctx, hex_str):
+    if "#" in hex_str:
+        hex_str = hex_str.replace("#", "")
+    new_color_role = discord.utils.get(ctx.guild.roles, name=f"#{hex_str}")
+    if not new_color_role:
+        new_color_role = await ctx.guild.create_role(name=f"#{hex_str}", color=discord.Color(value=int(hex_str, 16)))
+        dj_role = discord.utils.get(ctx.guild.roles, name='DJ')
+        await new_color_role.edit(position=dj_role.position-1)
+    current_color_role = [role for role in ctx.message.author.roles if role.name.startswith("#")]
+    if current_color_role:
+        await ctx.message.author.remove_roles(current_color_role[0])
+    await ctx.message.author.add_roles(new_color_role)
 
 @client.command(pass_context=True, name="newrole")
 async def add_new_role(ctx, channel_id, message_id, *args):
