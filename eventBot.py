@@ -555,7 +555,7 @@ async def set_color(ctx, hex_str):
     if "#" in hex_str:
         hex_str = hex_str.replace("#", "")
     new_color_role = discord.utils.get(ctx.guild.roles, name=f"#{hex_str}")
-    dj_role = await discord.utils.get(ctx.guild.roles, name='DJ')
+    dj_role = discord.utils.get(ctx.guild.roles, name='DJ')
     if not new_color_role:
         new_color_role = await ctx.guild.create_role(name=f"#{hex_str}", color=discord.Color(value=int(hex_str, 16)))
         print([role.position for role in ctx.message.author.roles])
