@@ -557,6 +557,7 @@ async def set_color(ctx, hex_str):
     if not new_color_role:
         new_color_role = await ctx.guild.create_role(name=f"#{hex_str}", color=discord.Color(value=int(hex_str, 16)))
         dj_role = discord.utils.get(ctx.guild.roles, name='DJ')
+        print('position of DJ---------', dj_role.position)
         await new_color_role.edit(position=dj_role.position-1)
     current_color_role = [role for role in ctx.message.author.roles if role.name.startswith("#")]
     if current_color_role:
