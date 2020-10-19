@@ -560,8 +560,8 @@ async def set_color(ctx, hex_str):
         new_color_role = await ctx.guild.create_role(name=f"#{hex_str}", color=discord.Color(value=int(hex_str, 16)))
         print([role.position for role in ctx.message.author.roles])
         print('position of DJ---------', dj_role.position)
-    await asyncio.sleep(1.0)
-    await new_color_role.edit(position=dj_role.position-1)
+        await asyncio.sleep(1.0)
+        await new_color_role.edit(position=dj_role.position-1)
     print('position of DJ---------', new_color_role.position)
     current_color_role = [role for role in ctx.message.author.roles if role.name.startswith("#")]
     if current_color_role:
