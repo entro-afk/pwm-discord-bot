@@ -53,10 +53,67 @@ with open(r'conf.yaml') as file:
 gyazo_client = Api(access_token=channelsConf['gyazo_token'])
 r = redis.Redis(host=channelsConf['remote_server']['host'], port=6379)
 
+import youtube_dl
+import requests
+
+song_queue = []
+FFMPEG_OPTIONS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}
+YDL_OPTIONS = {'format': 'bestaudio', 'noplaylist': 'True'}
+
+
+# Search videos from key-words or links
+def search(arg):
+    try:
+        requests.get("".join(arg))
+    except:
+        arg = " ".join(arg)
+    else:
+        arg = "".join(arg)
+    with youtube_dl.YoutubeDL(YDL_OPTIONS) as ydl:
+        info = ydl.extract_info(f"ytsearch:{arg}", download=False)['entries'][0]
+
+    return {'source': info['formats'][0]['url'], 'title': info['title']}
+
+
+# Plays the next song in the queue
+def play_next(ctx):
+    voice = discord.utils.get(client.voice_clients, guild=ctx.guild)
+    if len(song_queue) > 1:
+        del song_queue[0]
+        voice.play(discord.FFmpegPCMAudio(song_queue[0]['source'], executable="ffmpeg.exe", before_options='-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', options='-vn'), after=lambda e: play_next(ctx))
+        voice.is_playing()
+
+
+@client.command()
+async def play(ctx, *arg):
+    channel = ctx.message.author.voice.channel
+
+    if channel:
+        voice = discord.utils.get(client.voice_clients, guild=ctx.guild)
+        song = search(arg)
+        song_queue.append(song)
+
+        if voice and voice.is_connected():
+            await voice.move_to(channel)
+        else:
+            voice = await channel.connect()
+
+        if not voice.is_playing():
+            voice.play(discord.FFmpegPCMAudio(song_queue[0]['source'], executable="ffmpeg.exe", before_options='-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', options='-vn'), after=lambda e: play_next(ctx))
+            voice.is_playing()
+        else:
+            await ctx.send("Added to queue")
+    else:
+        await ctx.send("You're not connected to any channel!")
+
 
 @client.event
 async def on_ready():
     print('Bot is ready.')
+
+@client.event
+async def on_member_join(member):
+  print(member)
 
 
 @client.command()
@@ -403,7 +460,7 @@ async def give_everyone_this_role_except(ctx, role_name):
 @client.event
 async def on_message(message):
     owo_filter_msg = message.clean_content.lower()
-    if message.channel.name in channelsConf['event_making_channels'] and message.author.id in channelsConf['hosters']:
+    if message.channel.type != discord.ChannelType.private and message.channel.name in channelsConf['event_making_channels'] and message.author.id in channelsConf['hosters']:
         event_name = find_name_of_event(message.clean_content)
         emoji_less_text = clean_text([r'<[a-z]*:\w*:\d*>'], message.clean_content)
         at_sign_modified_text = emoji_less_text.replace('@', 'at')
@@ -755,7 +812,7 @@ async def mail_affirmation(ctx):
         message = ctx.message.clean_content.lstrip('!sendletter ')
         author = 'anon'
         guild = client.get_guild(channelsConf['guild_id'])
-        channel = discord.utils.get(guild.text_channels, name='affirmations-mail')
+        channel = discord.utils.get(guild.text_channels, name='affirmations-mail📩')
         if message.lower().startswith('signed'):
             author = ctx.author.name + f' ({ctx.author.id})'
             message = message.lstrip('signed')
