@@ -812,7 +812,9 @@ async def mail_affirmation(ctx):
         message = ctx.message.clean_content.lstrip('!sendletter ')
         author = 'anon'
         guild = client.get_guild(channelsConf['guild_id'])
+        print('guild id------------', guild.id)
         channel = discord.utils.get(guild.text_channels, id=751344514517434450)
+        await asyncio.sleep(1.0)
         if message.lower().startswith('signed'):
             author = ctx.author.name + f' ({ctx.author.id})'
             message = message.lstrip('signed')
