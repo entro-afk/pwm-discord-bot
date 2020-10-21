@@ -804,7 +804,7 @@ async def create_affirmation(ctx):
     if ctx.message.attachments:
         embed.set_image(url=ctx.message.attachments[0].url)
 
-    await affirm_channel.channel.send(embed=embed)
+    await affirm_channel.send(embed=embed)
 
 @client.command(pass_context=True, name="sendletter")
 async def mail_affirmation(ctx):
