@@ -787,7 +787,7 @@ async def emoji_success_feedback(message):
 @client.command(pass_context=True, name="affirm")
 async def create_affirmation(ctx):
     from_name = ""
-    stripped_content = ctx.message.content.lstrip('!affirm ').replace()
+    stripped_content = ctx.message.content.lstrip('!affirm ')
     title = stripped_content
     message = ""
     affirm_channel = discord.utils.get(ctx.guild.text_channels, name='affirmations-and-salutes')
