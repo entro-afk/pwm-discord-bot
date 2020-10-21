@@ -784,7 +784,7 @@ async def emoji_success_feedback(message):
     emoji = discord.utils.get(client.emojis, name='yes')
     await message.add_reaction(emoji)
 
-@client.command(pass_context=True, name="affirms")
+@client.command(pass_context=True, name="affirm")
 async def create_affirmation(ctx):
     from_name = ""
     stripped_content = ctx.message.content.lstrip('!affirm ').replace()
@@ -804,7 +804,7 @@ async def create_affirmation(ctx):
     if ctx.message.attachments:
         embed.set_image(url=ctx.message.attachments[0].url)
 
-    await ctx.message.channel.send(embed=embed)
+    await affirm_channel.channel.send(embed=embed)
 
 @client.command(pass_context=True, name="sendletter")
 async def mail_affirmation(ctx):
