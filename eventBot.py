@@ -23,6 +23,8 @@ from google.cloud import vision
 from sqlalchemy import *
 from sqlalchemy.engine import reflection
 from discord import File, Member, Role, PermissionOverwrite, ChannelType, Embed
+import youtube_dl
+import requests
 
 from sshtunnel import SSHTunnelForwarder
 
@@ -53,8 +55,7 @@ with open(r'conf.yaml') as file:
 gyazo_client = Api(access_token=channelsConf['gyazo_token'])
 r = redis.Redis(host=channelsConf['remote_server']['host'], port=6379)
 
-import youtube_dl
-import requests
+
 
 song_queue = []
 FFMPEG_OPTIONS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}
@@ -83,28 +84,137 @@ def play_next(ctx):
         voice.play(discord.FFmpegPCMAudio(song_queue[0]['source'], executable="ffmpeg.exe", before_options='-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', options='-vn'), after=lambda e: play_next(ctx))
         voice.is_playing()
 
+ytdl_format_options = {
+    'format': 'bestaudio/best',
+    'outtmpl': '%(extractor)s-%(id)s-%(title)s.%(ext)s',
+    'restrictfilenames': True,
+    'noplaylist': True,
+    'nocheckcertificate': True,
+    'ignoreerrors': False,
+    'logtostderr': False,
+    'quiet': True,
+    'no_warnings': True,
+    'default_search': 'auto',
+    'source_address': '0.0.0.0' # bind to ipv4 since ipv6 addresses cause issues sometimes
+}
+
+ffmpeg_options = {
+    'options': '-vn'
+}
+
+ytdl = youtube_dl.YoutubeDL(ytdl_format_options)
+
+
+class YTDLSource(discord.PCMVolumeTransformer):
+    def __init__(self, source, *, data, volume=0.5):
+        super().__init__(source, volume)
+
+        self.data = data
+
+        self.title = data.get('title')
+        self.url = data.get('url')
+
+    @classmethod
+    async def from_url(cls, url, *, loop=None, stream=False):
+        loop = loop or asyncio.get_event_loop()
+        data = await loop.run_in_executor(None, lambda: ytdl.extract_info(url, download=not stream))
+
+        if 'entries' in data:
+            # take first item from a playlist
+            data = data['entries'][0]
+
+        filename = data['url'] if stream else ytdl.prepare_filename(data)
+        return cls(discord.FFmpegPCMAudio(filename, **ffmpeg_options), data=data)
+
+@client.command()
+async def volume(ctx, volume: int):
+    """Changes the player's volume"""
+
+    if ctx.voice_client is None:
+        return await ctx.send("Not connected to a voice channel.")
+
+    ctx.voice_client.source.volume = volume / 100
+    await ctx.send("Changed volume to {}%".format(volume))
+
+@client.command()
+async def join(ctx, *, channel: discord.VoiceChannel):
+    """Joins a voice channel"""
+
+    if ctx.voice_client is not None:
+        return await ctx.voice_client.move_to(channel)
+
+    await channel.connect()
 
 @client.command()
 async def play(ctx, *arg):
     channel = ctx.message.author.voice.channel
+    await play_on_channel("".join(arg), channel, ctx.guild, ctx.message.channel)
 
-    if channel:
-        voice = discord.utils.get(client.voice_clients, guild=ctx.guild)
-        song = search(arg)
-        song_queue.append(song)
-
+async def play_on_channel(link, voice_channel, guild, message):
+    if voice_channel:
+        voice = discord.utils.get(client.voice_clients, guild=guild)
+        song = await YTDLSource.from_url(link, loop=client.loop, stream=True)
+        if not song_queue:
+            song_queue.append(song)
         if voice and voice.is_connected():
-            await voice.move_to(channel)
+            await voice.move_to(voice_channel)
         else:
-            voice = await channel.connect()
+            voice = await voice_channel.connect()
 
         if not voice.is_playing():
-            voice.play(discord.FFmpegPCMAudio(song_queue[0]['source'], executable="ffmpeg.exe", before_options='-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', options='-vn'), after=lambda e: play_next(ctx))
+            guild.voice_client.play(song_queue[0], after=current_song_finished)
+            voice.is_playing()
+    else:
+        await message.channel.send("You're not connected to any channel!")
+
+async def stop_on_channel(voice_channel, guild, message_channel):
+    if voice_channel:
+        voice = discord.utils.get(client.voice_clients, guild=guild)
+        if voice and voice.is_connected() and voice.is_playing():
+            guild.voice_client.pause()
+        else:
+            await message_channel.send("Stopped.")
+    else:
+        await message_channel.send("You're not connected to any channel!")
+
+async def rewind_on_channel(link, voice_channel, guild, message):
+    if voice_channel:
+        voice = discord.utils.get(client.voice_clients, guild=guild)
+        song = await YTDLSource.from_url(link, loop=client.loop, stream=True)
+        if voice and voice.is_connected():
+            await voice.move_to(voice_channel)
+        else:
+            voice = await voice_channel.connect()
+
+        if voice.is_playing():
+            song_queue.append(song)
+            guild.voice_client.stop()
+            song_queue.pop(0)
+            guild.voice_client.play(song_queue[0], after= lambda: current_song_finished)
             voice.is_playing()
         else:
-            await ctx.send("Added to queue")
+            guild.voice_client.stop()
+            song_queue.pop(0)
     else:
-        await ctx.send("You're not connected to any channel!")
+        await message.channel.send("You're not connected to any channel!")
+
+def current_song_finished(e):
+    print(e)
+    if song_queue:
+        song_queue.pop(0)
+
+async def handle_player_emoji(message, emoji, author):
+    if message.embeds[0].video:
+        if emoji.name == '▶':
+            await play_on_channel(message.embeds[0].video.url, author.voice.channel, message.guild, message)
+            await message.remove_reaction('⏹', author)
+            await message.remove_reaction('⏮', author)
+        elif emoji.name == '⏹':
+            await stop_on_channel(author.voice.channel, message.guild, message.channel)
+            await message.remove_reaction('▶', author)
+        elif emoji.name == '⏮':
+            await rewind_on_channel(message.embeds[0].video.url, author.voice.channel, message.guild, message)
+            await message.remove_reaction('⏮', author)
 
 
 @client.event
@@ -322,6 +432,9 @@ async def get_message_events(message_events, current_weekday):
 @client.event
 async def on_raw_reaction_add(payload):
     channel = client.get_channel(payload.channel_id)
+    if payload.member.id != client.user.id and channel.name in ['song-request', 'test-zone']:
+        video_msg = await client.get_channel(payload.channel_id).fetch_message(payload.message_id)
+        await handle_player_emoji(video_msg, payload.emoji, payload.member)
     if payload.channel_id == channelsConf['roles_channel']['id'] and payload.member.id != client.user.id or channel.name == 'fanclub-subscriptions':
         for post in channelsConf['roles_channel_messages']:
             if payload.message_id == post:
@@ -376,6 +489,7 @@ async def get_reacting_users(msg):
 @client.event
 async def on_raw_reaction_remove(payload):
     if payload.channel_id == channelsConf['roles_channel']['id'] and payload.user_id != client.user.id:
+
         for post in channelsConf['roles_channel_messages']:
             if payload.message_id == post:
                 await unassign_role(payload, channelsConf['message_id_to_role_mapping'][post])
@@ -457,6 +571,12 @@ async def give_everyone_this_role_except(ctx, role_name):
             await unassign_role_from_member(ctx.guild.id, member, role_name)
             print('Tried to remove role from ', member.display_name)
 
+async def add_music_reaction(message):
+    if message.embeds and message.embeds[0].video:
+        await message.add_reaction('▶')
+        await message.add_reaction('⏹')
+        await message.add_reaction('⏮')
+
 @client.event
 async def on_message(message):
     owo_filter_msg = message.clean_content.lower()
@@ -468,11 +588,16 @@ async def on_message(message):
             create_event(at_sign_modified_text, event_name, duration=1, attendees=None, description=message.clean_content, location=None)
         except Exception as err:
             print(err)
+    if message.channel.name in ['song-request', 'test-zone']:
+        await add_music_reaction(message)
     if owo_filter_msg.startswith("owo") or message.author.name == "OwO":
         if owo_filter_msg != "" and owo_filter_msg.split(" ")[1] in ["insult", "kill", "lick", "punch"] or any(word in message.embeds[0].author.name for word in ["insult", "kill", "lick", "punch"]):
             await message.delete()
     else:
         await client.process_commands(message)
+@client.event
+async def on_event(event_name):
+    print(f"{event_name} is dispatched")
 
 def delete_list_by_id(list_id):
     db_string = "postgres+psycopg2://postgres:{password}@{host}:{port}/postgres".format(username='root', password=channelsConf['postgres']['pwd'], host=channelsConf['postgres']['host'], port=channelsConf['postgres']['port'])
