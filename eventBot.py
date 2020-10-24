@@ -118,7 +118,7 @@ class YTDLSource(discord.PCMVolumeTransformer):
             data = source
             print('what is my data---------', data)
             filename = data['url'] if stream else ydl.prepare_filename(data)
-            return cls(discord.FFmpegPCMAudio(filename, **ffmpeg_options), data=data)
+            return cls(discord.FFmpegPCMAudio(filename, executable="ffmpeg.exe", **ffmpeg_options), data=data)
 
 @client.command()
 async def volume(ctx, volume: int):
