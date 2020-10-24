@@ -113,7 +113,7 @@ class YTDLSource(discord.PCMVolumeTransformer):
             data = data['entries'][0]
         data_url = data['url'] if "manifest" not in data['url'] and 'fragment_base_url' not in data else data['fragment_base_url'].rstrip('/')
         print('data url----------', data_url)
-        if stream and "manifest" not in data['url']
+        if stream and "manifest" not in data['url']:
             filename = data['url']
         else:
             data = await loop.run_in_executor(None, lambda: ytdl.extract_info(url))
