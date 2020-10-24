@@ -87,6 +87,9 @@ def play_next(ctx):
 ytdl_format_options = {
     'format': 'bestaudio/best',
     'outtmpl': '%(extractor)s-%(id)s-%(title)s.%(ext)s',
+    'restrictfilenames': True,
+    'noplaylist': True,
+    'nocheckcertificate': True,
     'ignoreerrors': False,
     'logtostderr': False,
     'quiet': True,
@@ -112,13 +115,14 @@ class YTDLSource(discord.PCMVolumeTransformer):
     @classmethod
     async def from_url(cls, url, *, loop=None, stream=False):
         loop = loop or asyncio.get_event_loop()
-        with youtube_dl.YoutubeDL(ytdl_format_options) as ydl:
-            source = ydl.extract_info(url, download=False)['formats'][0]
-        # data = await loop.run_in_executor(None, lambda: ytdl.extract_info(url, download=not stream))
-            data = source
-            print('what is my data---------', data)
-            filename = data['url'] if stream else ydl.prepare_filename(data)
-            return cls(discord.FFmpegPCMAudio(filename, **ffmpeg_options), data=data)
+        data = await loop.run_in_executor(None, lambda: ytdl.extract_info(url, download=not stream))
+
+        if 'entries' in data:
+            # take first item from a playlist
+            data = data['entries'][0]
+
+        filename = data['url'] if stream else ytdl.prepare_filename(data)
+        return cls(discord.FFmpegPCMAudio(filename, **ffmpeg_options), data=data)
 
 @client.command()
 async def volume(ctx, volume: int):
@@ -147,20 +151,17 @@ async def play(ctx, *arg):
 async def play_on_channel(link, voice_channel, guild, message):
     if voice_channel:
         voice = discord.utils.get(client.voice_clients, guild=guild)
-        with youtube_dl.YoutubeDL(ytdl_format_options) as ydl:
-            source = ydl.extract_info(link, download=False)['formats'][0]['url']
-            song = discord.FFmpegPCMAudio(source, **FFMPEG_OPTIONS)
-            if not song_queue:
-                song_queue.append(song)
-            if voice and voice.is_connected():
-                await voice.move_to(voice_channel)
-            else:
-                voice = await voice_channel.connect()
+        song = await YTDLSource.from_url(link, loop=client.loop)
+        if not song_queue:
+            song_queue.append(song)
+        if voice and voice.is_connected():
+            await voice.move_to(voice_channel)
+        else:
+            voice = await voice_channel.connect()
 
-            if not voice.is_playing():
-
-                guild.voice_client.play(song_queue[0], after=current_song_finished)
-                voice.is_playing()
+        if not voice.is_playing():
+            guild.voice_client.play(song_queue[0], after=current_song_finished, stream=True)
+            voice.is_playing()
     else:
         await message.channel.send("You're not connected to any channel!")
 
@@ -204,7 +205,7 @@ def current_song_finished(e):
 async def handle_player_emoji(message, emoji, author):
     if message.embeds[0].video:
         print('url------------', message.embeds[0])
-        print(message.embeds[0].url)
+        print(message.embeds[0].video.url)
         if emoji.name == '▶':
             await play_on_channel(message.embeds[0].video.url, author.voice.channel, message.guild, message)
             await message.remove_reaction('⏹', author)
