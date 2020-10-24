@@ -111,7 +111,7 @@ class YTDLSource(discord.PCMVolumeTransformer):
         if 'entries' in data:
             # take first item from a playlist
             data = data['entries'][0]
-        data_url = data['url'] if "manifest" not in data['url'] and 'fragment_base_url' not in data['url'] else data['formats'][0]['fragment_base_url']
+        data_url = data['url'] if "manifest" not in data['url'] and 'fragment_base_url' not in data else data['fragment_base_url'].rstrip('/')
         print('data url----------', data_url)
         filename = data_url if stream else ytdl.prepare_filename(data)
         return cls(discord.FFmpegPCMAudio(filename, **ffmpeg_options), data=data)
