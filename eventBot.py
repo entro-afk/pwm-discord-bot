@@ -162,6 +162,7 @@ async def play_on_channel(link, voice_channel, guild, message):
     if voice_channel:
         voice = discord.utils.get(client.voice_clients, guild=guild)
         song = await YTDLSource.from_url(link, loop=client.loop,  stream=True)
+        print('where is my song------------------', song)
         if not song_queue:
             song_queue.append(song)
         if voice and voice.is_connected():
