@@ -162,7 +162,7 @@ async def play_on_channel(link, voice_channel, guild, message):
             voice = await voice_channel.connect()
 
         if not voice.is_playing():
-            guild.voice_client.play(song_queue[0], after=current_song_finished)
+            guild.voice_client.play(song_queue[0], after=current_song_finished, stream=True)
             voice.is_playing()
     else:
         await message.channel.send("You're not connected to any channel!")
@@ -180,7 +180,7 @@ async def stop_on_channel(voice_channel, guild, message_channel):
 async def rewind_on_channel(link, voice_channel, guild, message):
     if voice_channel:
         voice = discord.utils.get(client.voice_clients, guild=guild)
-        song = await YTDLSource.from_url(link, loop=client.loop)
+        song = await YTDLSource.from_url(link, loop=client.loop, stream=True)
         if voice and voice.is_connected():
             await voice.move_to(voice_channel)
         else:
