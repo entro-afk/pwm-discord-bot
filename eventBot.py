@@ -118,7 +118,7 @@ class YTDLSource(discord.PCMVolumeTransformer):
             data = source
             print('what is my data---------', data)
             filename = data['url'] if stream else ydl.prepare_filename(data)
-            return cls(discord.FFmpegPCMAudio(filename, executable="ffmpeg.exe", **ffmpeg_options), data=data)
+            return cls(discord.FFmpegPCMAudio(filename, **ffmpeg_options), data=data)
 
 @client.command()
 async def volume(ctx, volume: int):
@@ -149,7 +149,7 @@ async def play_on_channel(link, voice_channel, guild, message):
         voice = discord.utils.get(client.voice_clients, guild=guild)
         with youtube_dl.YoutubeDL(ytdl_format_options) as ydl:
             source = ydl.extract_info(link, download=False)['formats'][0]['url']
-            song = discord.FFmpegPCMAudio(source, executable="./ffmpeg.exe", **FFMPEG_OPTIONS)
+            song = discord.FFmpegPCMAudio(source, **FFMPEG_OPTIONS)
             if not song_queue:
                 song_queue.append(song)
             if voice and voice.is_connected():
