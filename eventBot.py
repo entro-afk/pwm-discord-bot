@@ -106,23 +106,14 @@ class YTDLSource(discord.PCMVolumeTransformer):
     @classmethod
     async def from_url(cls, url, *, loop=None, stream=False):
         loop = loop or asyncio.get_event_loop()
-        try:
-            data = await loop.run_in_executor(None, lambda: ytdl.extract_info(url, download=not stream))
+        data = await loop.run_in_executor(None, lambda: ytdl.extract_info(url, download=not stream))
 
-            if 'entries' in data:
-                # take first item from a playlist
-                data = data['entries'][0]
-
-            filename = data['url'] if stream else ytdl.prepare_filename(data)
-            output_song = cls(discord.FFmpegPCMAudio(filename, **ffmpeg_options), data=data)
-            print('got to output song before except------------')
-
-        except Exception as err:
-            print('we foundddd an error-------------', err)
-            filename = ytdl.prepare_filename(data)
-            output_song = cls(discord.FFmpegPCMAudio(filename, **ffmpeg_options), data=data)
-        return output_song
-
+        if 'entries' in data:
+            # take first item from a playlist
+            data = data['entries'][0]
+        data_url = data['url'] if "manifest" not in data['url'] and 'fragment_base_url' not in data['url'] else data['fragment_base_url']
+        filename = data_url if stream else ytdl.prepare_filename(data)
+        return cls(discord.FFmpegPCMAudio(filename, **ffmpeg_options), data=data)
 
 
 @client.command()
@@ -162,16 +153,8 @@ async def play_on_channel(link, voice_channel, guild, message):
             voice = await voice_channel.connect()
         print('do i even get to connect to my voice---------', voice)
         if not voice.is_playing():
-            try:
-                print('do i even get to before i play--------')
-                guild.voice_client.play(song_queue[0])
-            except Exception as err:
-                print('voice client errrrrr--------', err)
-                song_queue[0] = await YTDLSource.from_url(link, loop=client.loop)
-                guild.voice_client.play(song_queue[0])
-            if song_queue:
-                song_queue.pop(0)
-            print('do i even get to set to is playing-----------', voice.is_playing())
+            print('do i even get to before i play--------')
+            guild.voice_client.play(song_queue[0], after=current_song_finished)
             voice.is_playing()
     else:
         await message.channel.send("You're not connected to any channel!")
@@ -199,7 +182,7 @@ async def rewind_on_channel(link, voice_channel, guild, message):
             song_queue.append(song)
             guild.voice_client.stop()
             song_queue.pop(0)
-            guild.voice_client.play(song_queue[0], after= lambda: current_song_finished)
+            guild.voice_client.play(song_queue[0], after=current_song_finished)
             voice.is_playing()
         else:
             guild.voice_client.stop()
