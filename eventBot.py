@@ -170,7 +170,12 @@ async def play_on_channel(link, voice_channel, guild, message):
             voice = await voice_channel.connect()
 
         if not voice.is_playing():
-            guild.voice_client.play(song_queue[0], after=current_song_finished)
+            try:
+                guild.voice_client.play(song_queue[0], after=current_song_finished)
+            except Exception as err:
+                print('voice client--------', err)
+                song_queue[0] = await YTDLSource.from_url(link, loop=client.loop)
+                guild.voice_client.play(song_queue[0], after=current_song_finished)
             voice.is_playing()
     else:
         await message.channel.send("You're not connected to any channel!")
