@@ -215,14 +215,14 @@ async def handle_player_emoji(message, emoji, author):
         print('url------------', message.embeds[0])
         print(message.embeds[0].url)
         if emoji.name == '▶':
-            await play_on_channel(message.embeds[0].video.url, author.voice.channel, message.guild, message)
+            await play_on_channel(message.embeds[0].url, author.voice.channel, message.guild, message)
             await message.remove_reaction('⏹', author)
             await message.remove_reaction('⏮', author)
         elif emoji.name == '⏹':
             await stop_on_channel(author.voice.channel, message.guild, message.channel)
             await message.remove_reaction('▶', author)
         elif emoji.name == '⏮':
-            await rewind_on_channel(message.embeds[0].video.url, author.voice.channel, message.guild, message)
+            await rewind_on_channel(message.embeds[0].url, author.voice.channel, message.guild, message)
             await message.remove_reaction('⏮', author)
 
 
