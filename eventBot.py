@@ -194,7 +194,8 @@ async def rewind_on_channel(link, voice_channel, guild, message):
             voice.is_playing()
         else:
             guild.voice_client.stop()
-            song_queue.pop(0)
+            if song_queue:
+                song_queue.pop(0)
     else:
         await message.channel.send("You're not connected to any channel!")
 
