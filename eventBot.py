@@ -105,6 +105,7 @@ class YTDLSource(discord.PCMVolumeTransformer):
 
     @classmethod
     async def from_url(cls, url, *, loop=None, stream=False):
+        global ffmpeg_options
         loop = loop or asyncio.get_event_loop()
         data = await loop.run_in_executor(None, lambda: ytdl.extract_info(url, download=not stream))
 
@@ -118,6 +119,7 @@ class YTDLSource(discord.PCMVolumeTransformer):
         else:
             data = await loop.run_in_executor(None, lambda: ytdl.extract_info(url))
             filename = ytdl.prepare_filename(data)
+            ffmpeg_options = {'before_options': '-reconnect 1 -reconnect_delay_max 5', 'options': '-vn'}
         return cls(discord.FFmpegPCMAudio(filename, **ffmpeg_options), data=data)
 
 
