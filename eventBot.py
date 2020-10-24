@@ -121,6 +121,7 @@ class YTDLSource(discord.PCMVolumeTransformer):
             # take first item from a playlist
             data = data['entries'][0]
 
+        print('what is my data---------', data)
         filename = data['url'] if stream else ytdl.prepare_filename(data)
         return cls(discord.FFmpegPCMAudio(filename, **ffmpeg_options), data=data)
 
@@ -151,7 +152,7 @@ async def play(ctx, *arg):
 async def play_on_channel(link, voice_channel, guild, message):
     if voice_channel:
         voice = discord.utils.get(client.voice_clients, guild=guild)
-        song = await YTDLSource.from_url(link, loop=client.loop)
+        song = await YTDLSource.from_url(link, loop=client.loop,  stream=True)
         if not song_queue:
             song_queue.append(song)
         if voice and voice.is_connected():
@@ -160,7 +161,7 @@ async def play_on_channel(link, voice_channel, guild, message):
             voice = await voice_channel.connect()
 
         if not voice.is_playing():
-            guild.voice_client.play(song_queue[0], after=current_song_finished, stream=True)
+            guild.voice_client.play(song_queue[0], after=current_song_finished)
             voice.is_playing()
     else:
         await message.channel.send("You're not connected to any channel!")
@@ -205,7 +206,7 @@ def current_song_finished(e):
 async def handle_player_emoji(message, emoji, author):
     if message.embeds[0].video:
         print('url------------', message.embeds[0])
-        print(message.embeds[0].video.url)
+        print(message.embeds[0].url)
         if emoji.name == '▶':
             await play_on_channel(message.embeds[0].video.url, author.voice.channel, message.guild, message)
             await message.remove_reaction('⏹', author)
