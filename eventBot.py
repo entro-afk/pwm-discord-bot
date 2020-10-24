@@ -151,7 +151,8 @@ async def play_on_channel(link, voice_channel, guild, message):
     if voice_channel:
         voice = discord.utils.get(client.voice_clients, guild=guild)
         with youtube_dl.YoutubeDL(ytdl_format_options) as ydl:
-            song = ydl.extract_info(link, download=False)['formats'][0]['url']
+            source = ydl.extract_info(link, download=False)['formats'][0]['url']
+            song = discord.FFmpegPCMAudio(source, **FFMPEG_OPTIONS)
             if not song_queue:
                 song_queue.append(song)
             if voice and voice.is_connected():
