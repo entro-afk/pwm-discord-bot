@@ -112,8 +112,7 @@ class YTDLSource(discord.PCMVolumeTransformer):
         self.title = data.get('title')
         self.url = data.get('url')
 
-    async def from_url(, url, *, loop=None, stream=False):
-        loop = loop or asyncio.get_event_loop()
+    async def from_url(self, url, *, loop=None, stream=False):
         with youtube_dl.YoutubeDL(ytdl_format_options) as ydl:
             source = ydl.extract_info(url, download=False)['formats'][0]
         # data = await loop.run_in_executor(None, lambda: ytdl.extract_info(url, download=not stream))
