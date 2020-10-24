@@ -206,7 +206,7 @@ def current_song_finished(e):
 async def handle_player_emoji(message, emoji, author):
     if message.embeds[0].video:
         print('url------------', message.embeds[0])
-        print(message.embeds[0].video.url)
+        print(message.embeds[0].url)
         if emoji.name == '▶':
             await play_on_channel(message.embeds[0].video.url, author.voice.channel, message.guild, message)
             await message.remove_reaction('⏹', author)
