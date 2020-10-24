@@ -123,11 +123,14 @@ class YTDLSource(discord.PCMVolumeTransformer):
                 # take first item from a playlist
                 data = data['entries'][0]
 
-            print('what is my data---------', data)
             filename = data['url'] if stream else ytdl.prepare_filename(data)
-        except:
+            return cls(discord.FFmpegPCMAudio(filename, **ffmpeg_options), data=data)
+        except Exception as err:
+            print(err)
             filename =ytdl.prepare_filename(data)
-        return cls(discord.FFmpegPCMAudio(filename, **ffmpeg_options), data=data)
+            return cls(discord.FFmpegPCMAudio(filename, **ffmpeg_options), data=data)
+
+
 
 @client.command()
 async def volume(ctx, volume: int):
