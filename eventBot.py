@@ -153,7 +153,7 @@ async def play(ctx, *arg):
 async def play_on_channel(link, voice_channel, guild, message):
     if voice_channel:
         voice = discord.utils.get(client.voice_clients, guild=guild)
-        song = await YTDLSource.from_url(link, loop=client.loop, stream=True)
+        song = await YTDLSource.from_url(link, loop=client.loop)
         if not song_queue:
             song_queue.append(song)
         if voice and voice.is_connected():
