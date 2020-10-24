@@ -180,7 +180,7 @@ async def stop_on_channel(voice_channel, guild, message_channel):
 async def rewind_on_channel(link, voice_channel, guild, message):
     if voice_channel:
         voice = discord.utils.get(client.voice_clients, guild=guild)
-        song = await YTDLSource.from_url(link, loop=client.loop, stream=True)
+        song = await YTDLSource.from_url(link, loop=client.loop)
         if voice and voice.is_connected():
             await voice.move_to(voice_channel)
         else:
