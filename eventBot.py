@@ -439,7 +439,7 @@ async def on_raw_reaction_add(payload):
         if channel.name == 'fanclub-subscriptions':
             roles_msg = await client.get_channel(payload.channel_id).fetch_message(payload.message_id)
         else:
-            roles_msg = client.get_channel(channelsConf['roles_channel']['id']).fetch_message(payload.message_id)
+            roles_msg = await client.get_channel(channelsConf['roles_channel']['id']).fetch_message(payload.message_id)
         roles_rows = roles_msg.embeds[0].description.split("\n")
         found_pair = None
         for emoji_role_pair in roles_rows:
