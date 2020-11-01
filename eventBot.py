@@ -469,7 +469,7 @@ async def assign_role(payload, role_to_add):
     if not role:
         await guild.create_role(name=role_to_add)
         role = discord.utils.get(guild.roles, name=role_to_add)
-    member = guild.get_member(payload.user_id)
+    member = payload.member
     await member.add_roles(role, reason=role_to_add)
 
 
@@ -490,8 +490,8 @@ async def on_raw_reaction_remove(payload):
             if payload.message_id == post:
                 await unassign_role(payload, channelsConf['message_id_to_role_mapping'][post])
                 break
-        if payload.message_id in channelsConf['role_setup_msg_id']:
-            roles_msg = await client.get_channel(channelsConf['roles_channel']['id']).fetch_message(payload.message_id)
+        roles_msg = await client.get_channel(channelsConf['roles_channel']['id']).fetch_message(payload.message_id)
+        if roles_msg.embeds:
             roles_rows = roles_msg.embeds[0].description.split("\n")
             found_pair = None
             for emoji_role_pair in roles_rows:
@@ -504,13 +504,14 @@ async def on_raw_reaction_remove(payload):
 
 
 
+
 async def unassign_role(payload, role_to_remove):
     guild = client.get_guild(payload.guild_id)
     channel = discord.utils.get(guild.text_channels, name=channelsConf['roles_channel']['name'])
     msg = await channel.fetch_message(payload.message_id)
 
     role = discord.utils.get(guild.roles, name=role_to_remove)
-    member = guild.get_member(payload.user_id)
+    member = await(await client.fetch_guild(payload.guild_id)).fetch_member(payload.user_id)
     user_ids = await get_reacting_users(msg)
     if payload.user_id not in user_ids:
         await member.remove_roles(role, reason=role_to_remove)
