@@ -490,8 +490,8 @@ async def on_raw_reaction_remove(payload):
             if payload.message_id == post:
                 await unassign_role(payload, channelsConf['message_id_to_role_mapping'][post])
                 break
-        roles_msg = await client.get_channel(channelsConf['roles_channel']['id']).fetch_message(payload.message_id)
-        if roles_msg.embeds:
+        if payload.message_id in channelsConf['role_setup_msg_id']:
+            roles_msg = await client.get_channel(channelsConf['roles_channel']['id']).fetch_message(payload.message_id)
             roles_rows = roles_msg.embeds[0].description.split("\n")
             found_pair = None
             for emoji_role_pair in roles_rows:
@@ -500,7 +500,8 @@ async def on_raw_reaction_remove(payload):
                     break
             if found_pair:
                 found_role = ' '.join(found_pair.strip().split(" ")[1:])
-                await unassign_role(payload, found_role)
+                member = await(await client.fetch_guild(payload.guild_id)).fetch_member(payload.user_id)
+                await unassign_role_from_member(payload.guild_id, member, found_role)
 
 
 
@@ -548,7 +549,7 @@ async def unassign_role_from_member(guild_id, member: Member, role_to_remove):
     if member_has_role_to_be_removed:
         guild = client.get_guild(guild_id)
         role = discord.utils.get(guild.roles, name=role_to_remove)
-        member = guild.get_member(member.id)
+        member = await(await client.fetch_guild(guild_id)).fetch_member(member.id)
         await member.remove_roles(role, reason=role_to_remove)
 
 
