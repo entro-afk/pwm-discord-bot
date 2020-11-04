@@ -456,10 +456,10 @@ async def on_raw_reaction_add(payload):
                 if '[' in found_role:
                     found_role = found_role.split("[")[0].strip()
                 list_name = f"{found_role} Fanclub"
-                list_names = [listy['list_name'] for listy in get_lists()]
+                list_names = [listy['list_name'] for listy in get_lists(payload.guild_id)]
                 if list_name not in list_names:
-                    create_db_list(list_name, '', [])
-                add_to_db_list(list_id, list_name, f"<@!{payload.member.id}>", [])
+                    create_db_list(list_name, '', [], payload.guild_id)
+                add_to_db_list(list_id, list_name, f"<@!{payload.member.id}>", [], payload.guild_id)
 
 
 
@@ -597,16 +597,16 @@ async def on_message(message):
 async def on_event(event_name):
     print(f"{event_name} is dispatched")
 
-def delete_list_by_id(list_id):
+def delete_list_by_id(list_id, guild_id):
     db_string = "postgres+psycopg2://postgres:{password}@{host}:{port}/postgres".format(username='root', password=channelsConf['postgres']['pwd'], host=channelsConf['postgres']['host'], port=channelsConf['postgres']['port'])
     db = create_engine(db_string)
     metadata = MetaData(schema="pwm")
     try:
         with db.connect() as conn:
             list_names_table = Table('listNames', metadata, autoload=True, autoload_with=conn)
-            delete_query = f"DELETE FROM pwm.\"listNames\" WHERE id={list_id}"
+            delete_query = f"DELETE FROM pwm.\"listNames\" WHERE id={list_id} AND guild_id={guild_id}"
             res = conn.execute(delete_query)
-            delete_items_query = f"DELETE FROM pwm.\"listItems\" WHERE \"listID\"={list_id}"
+            delete_items_query = f"DELETE FROM pwm.\"listItems\" WHERE \"listID\"={list_id} AND guild_id={guild_id}"
             res2 = conn.execute(delete_items_query)
     except Exception as err:
         print(err)
@@ -614,14 +614,37 @@ def delete_list_by_id(list_id):
             conn.close()
         db.dispose()
 
+@client.command(pass_context=True, name="deleteitem")
+async def delete_item(ctx, id):
+    guild_id = ctx.guild.id
+    result_rom_deletion = delete_item_by_id(id, guild_id)
+    if result_rom_deletion:
+        embed = Embed(title=f"Item #{id} Deleted:", color=0x00ff00)
+        await ctx.message.channel.send(embed=embed)
 
-def clear_list_items(list_id):
+
+def delete_item_by_id(item_id, guild_id):
     db_string = "postgres+psycopg2://postgres:{password}@{host}:{port}/postgres".format(username='root', password=channelsConf['postgres']['pwd'], host=channelsConf['postgres']['host'], port=channelsConf['postgres']['port'])
     db = create_engine(db_string)
     metadata = MetaData(schema="pwm")
     try:
         with db.connect() as conn:
-            delete_items_query = f"DELETE FROM pwm.\"listItems\" WHERE \"listID\"={list_id}"
+            delete_answers_query = f"DELETE FROM pwm.\"listItems\" WHERE \"itemID\"={item_id} AND guild_id={guild_id}"
+            res2 = conn.execute(delete_answers_query)
+            return True
+    except Exception as err:
+        print(err)
+        if conn:
+            conn.close()
+        db.dispose()
+
+def clear_list_items(list_id, guild_id):
+    db_string = "postgres+psycopg2://postgres:{password}@{host}:{port}/postgres".format(username='root', password=channelsConf['postgres']['pwd'], host=channelsConf['postgres']['host'], port=channelsConf['postgres']['port'])
+    db = create_engine(db_string)
+    metadata = MetaData(schema="pwm")
+    try:
+        with db.connect() as conn:
+            delete_items_query = f"DELETE FROM pwm.\"listItems\" WHERE \"listID\"={list_id} AND guild_id={guild_id}"
             res2 = conn.execute(delete_items_query)
     except Exception as err:
         print(err)
@@ -632,15 +655,16 @@ def clear_list_items(list_id):
 @client.command(pass_context=True, name="clearlist")
 @commands.has_any_role('Event Hoster', 'Moderator')
 async def clear_list(ctx, id):
-    list_name = get_list_name_by_id(id)
-    clear_list_items(id)
-    if not get_table_list_items(id, None):
+    guild_id = ctx.guild.id
+    list_name = get_list_name_by_id(id, guild_id)
+    clear_list_items(id, guild_id)
+    if not get_table_list_items(id, None, guild_id):
         embed = Embed(title=f"List #{id} Cleared:", description=list_name, color=0x00ff00)
         await ctx.message.channel.send(embed=embed)
 
 @client.command(pass_context=True, name="listnames")
 async def get_lists_table(ctx):
-    list_rows = get_lists()
+    list_rows = get_lists(ctx.guild.id)
     description_rows = []
 
     for row in list_rows:
@@ -678,14 +702,14 @@ async def create_list(ctx, *args):
         list_name = ' '.join(args)
     list_name = list_name.strip()
     list_items = []
-    table_id = create_db_list(list_name, items, list_items)
+    table_id = create_db_list(list_name, items, list_items, ctx.guild.id)
     embed = Embed(title=f"List #{table_id} Created", description='\n'.join(list_items), color=0x00ff00)
     embed.add_field(name='List ID', value=f"{table_id}", inline=True)
     embed.add_field(name='List Name', value=f"{list_name}", inline=True)
     await ctx.message.channel.send(embed=embed)
 
 
-def create_db_list(list_name, items, list_items):
+def create_db_list(list_name, items, list_items, guild_id):
     try:
         db_string = "postgres+psycopg2://postgres:{password}@{host}:{port}/postgres".format(username='root', password=
         channelsConf['postgres']['pwd'], host=channelsConf['postgres']['host'], port=channelsConf['postgres']['port'])
@@ -694,7 +718,7 @@ def create_db_list(list_name, items, list_items):
 
         with db.connect() as conn:
             list_names_table = Table('listNames', metadata, autoload=True, autoload_with=conn)
-            insert_statement = list_names_table.insert().values(listName=list_name)
+            insert_statement = list_names_table.insert().values(listName=list_name, guild_id=guild_id)
             res = conn.execute(insert_statement)
             table_id = res.inserted_primary_key[0]
 
@@ -704,9 +728,14 @@ def create_db_list(list_name, items, list_items):
             lowest_position_number = 0
 
             for item in items and items.split(","):
-                insert_statement = list_items_table.insert().values(itemName=item.strip(), listID=table_id, position=lowest_position_number)
+                insert_statement = list_items_table.insert().values(itemName=item.strip(), listID=table_id, position=lowest_position_number, guild_id=guild_id)
                 conn.execute(insert_statement)
-            select_st = select([list_items_table]).where(list_items_table.c.listID == table_id)
+            select_st = select([list_items_table]).where(
+                and_(
+                    list_items_table.c.listID == table_id,
+                    list_items_table.c.guild_id == guild_id
+                )
+            )
             res = conn.execute(select_st)
             for row in res:
                 list_items.append("▫️" + row.itemName)
@@ -747,6 +776,26 @@ async def set_color(ctx, hex_str):
     if current_color_role:
         await ctx.message.author.remove_roles(current_color_role[0])
     await ctx.message.author.add_roles(new_color_role)
+
+def get_id_of_list(list_name):
+    db_string = "postgres+psycopg2://postgres:{password}@{host}:{port}/postgres".format(username='root', password=channelsConf['postgres']['pwd'], host=channelsConf['postgres']['host'], port=channelsConf['postgres']['port'])
+    db = create_engine(db_string)
+    metadata = MetaData(schema="pwm")
+    try:
+        with db.connect() as conn:
+            list_names_table = Table('listNames', metadata, autoload=True, autoload_with=conn)
+            select_st = select([list_names_table]).where(list_names_table.c.listName == list_name)
+            res = conn.execute(select_st)
+            for row in res:
+                question = row[1]
+                question_id = row[0]
+                break
+            return question_id
+    except Exception as err:
+        print(err)
+        if conn:
+            conn.close()
+        db.dispose()
 
 @client.command(pass_context=True, name="newrole")
 async def add_new_role(ctx, channel_id, message_id, *args):
@@ -795,18 +844,30 @@ async def get_list(ctx, *args):
 
 
     try:
-        list_items = []
-        table_list_items = get_table_list_items(list_id, list_name)
-        for item_name in table_list_items:
-            list_items.append("▫️" + item_name)
+        table_list_items = get_table_list_items(list_id, list_name, ctx.guild.id)
         if list_id:
-            list_name = get_list_name_by_id(list_id)
-        embed = Embed(title=f"Here is the list.", description=f"{list_name}:\n" + '\n'.join(list_items), color=0x00ff00)
-        await ctx.message.channel.send(embed=embed)
+            list_name = get_list_name_by_id(list_id, ctx.guild.id)
+        else:
+            list_id = get_id_of_list(list_name)
+
+        i = 0
+        embed_sets = []
+        max_n = math.ceil(len(table_list_items) / 20)
+        while i < max_n:
+            begin_num = i * 20
+            embed = Embed(title=f"{list_name}", description=f"List ID#{list_id}" if i == 0 else "Continued", color=0x00ff00)
+            item_ids = '\n'.join([str(item_row['id']) for item_row in table_list_items[begin_num:begin_num + 20]])
+            item_texts = '\n'.join([item_row['answer'] for item_row in table_list_items[begin_num:begin_num + 20]])
+            embed.add_field(name='Item ID', value=f"{item_ids}", inline=True)
+            embed.add_field(name='Item', value=f"{item_texts}", inline=True)
+            embed_sets.append(embed)
+            i += 1
+        for embed in embed_sets:
+            await ctx.message.channel.send(embed=embed)
     except Exception as err:
         print(err)
 
-def get_lists():
+def get_lists(guild_id):
     db_string = "postgres+psycopg2://postgres:{password}@{host}:{port}/postgres".format(username='root', password=channelsConf['postgres']['pwd'], host=channelsConf['postgres']['host'], port=channelsConf['postgres']['port'])
     db = create_engine(db_string)
     metadata = MetaData(schema="pwm")
@@ -814,7 +875,7 @@ def get_lists():
         with db.connect() as conn:
             lists = []
             list_names_table = Table('listNames', metadata, autoload=True, autoload_with=conn)
-            select_st = select([list_names_table])
+            select_st = select([list_names_table]).where(list_names_table.c.guild_id == guild_id)
             res = conn.execute(select_st)
             for row in res:
                 list_name = row[1]
@@ -840,9 +901,9 @@ async def send_ping_from_list(ctx, *args):
         list_id = list_name
     if "fanclub" not in list_name.lower():
         list_name = list_name.strip() + " Fanclub"
-    tags_in_list = get_table_list_items(list_id, list_name)
+    tags_in_list = get_table_list_items(list_id, list_name, ctx.guild.id)
     if list_id:
-        list_name = get_list_name_by_id(list_id)
+        list_name = get_list_name_by_id(list_id, ctx.guild.id)
 
     singer = client.get_user(int(re.sub("[^0-9]", "", list_name)))
     for tag in tags_in_list:
@@ -854,14 +915,19 @@ async def send_ping_from_list(ctx, *args):
             await ping_receiver.send(embed=embed)
 
 
-def get_list_name_by_id(list_id):
+def get_list_name_by_id(list_id, guild_id):
     db_string = "postgres+psycopg2://postgres:{password}@{host}:{port}/postgres".format(username='root', password=channelsConf['postgres']['pwd'], host=channelsConf['postgres']['host'], port=channelsConf['postgres']['port'])
     db = create_engine(db_string)
     metadata = MetaData(schema="pwm")
     try:
         with db.connect() as conn:
             list_names_table = Table('listNames', metadata, autoload=True, autoload_with=conn)
-            select_st = select([list_names_table]).where(list_names_table.c.id == list_id)
+            select_st = select([list_names_table]).where(
+                and_(
+                    list_names_table.c.id == list_id,
+                    list_names_table.c.guild_id == guild_id
+                )
+            )
             res = conn.execute(select_st)
             for row in res:
                 list_name = row[1]
@@ -873,7 +939,7 @@ def get_list_name_by_id(list_id):
         db.dispose()
 
 
-def get_table_list_items(list_id, list_name):
+def get_table_list_items(list_id, list_name, guild_id):
     db_string = "postgres+psycopg2://postgres:{password}@{host}:{port}/postgres".format(username='root', password=channelsConf['postgres']['pwd'], host=channelsConf['postgres']['host'], port=channelsConf['postgres']['port'])
     db = create_engine(db_string)
     metadata = MetaData(schema="pwm")
@@ -884,17 +950,31 @@ def get_table_list_items(list_id, list_name):
                 condition = list_names_table.c.id == list_id
             else:
                 condition = list_names_table.c.listName == list_name
-            select_st = select([list_names_table]).where(condition)
+            select_st = select([list_names_table]).where(
+                and_(
+                    condition,
+                    list_names_table.c.guild_id == guild_id
+                )
+            )
             res = conn.execute(select_st)
             for row in res:
                 list_name = row[1]
                 list_id = row[0]
             list_items_table = Table('listItems', metadata, autoload=True, autoload_with=conn)
-            select_st = select([list_items_table]).where(list_items_table.c.listID == list_id)
+            select_st = select([list_items_table]).where(
+                and_(
+                    list_items_table.c.listID == list_id,
+                    list_items_table.c.guild_id == guild_id
+                )
+            )
             res = conn.execute(select_st)
             table_list_items = []
             for row in res:
-                table_list_items.append(row.itemName)
+                table_list_items.append({
+                    'id': row.itemID,
+                    'answer': row.itemName
+                })
+
             return table_list_items
     except Exception as err:
         print(err)
@@ -962,13 +1042,26 @@ async def add_to_list(ctx, *args):
         if list_name.strip().isnumeric():
             list_id = int(list_name.strip())
         list_items = []
-        list = add_to_db_list(list_id, list_name.strip(), items, list_items)
-        embed = Embed(title=f"Added to List #{list['id']}", description=f"{list['listName']}:\n" + '\n'.join(list_items), color=0x00ff00)
-        await ctx.message.channel.send(embed=embed)
+        list = add_to_db_list(list_id, list_name.strip(), items, list_items, ctx.guild.id)
+        embed_sets = []
+        i = 0
+        max_n = math.ceil(len(list_items) / 20)
+        while i < max_n:
+            begin_num = i * 20
+            embed = Embed(title=f"Added to List ID#{list_id}" if i == 0 else "Continued", description=list['listName'], color=0x00ff00)
+            list_items_ids = '\n'.join([str(item_row['id']) for item_row in list_items[begin_num:begin_num + 20]])
+            list_items_texts = '\n'.join([item_row['itemName'] for item_row in list_items[begin_num:begin_num + 20]])
+            embed.add_field(name='Item ID', value=f"{list_items_ids}")
+            embed.add_field(name='Item', value=f"{list_items_texts}")
+            embed_sets.append(embed)
+            i += 1
+        for embed in embed_sets:
+            await ctx.message.channel.send(embed=embed)
+
     except Exception as err:
         print(err)
 
-def add_to_db_list(list_id, list_name, items, list_items):
+def add_to_db_list(list_id, list_name, items, list_items, guild_id):
     db_string = "postgres+psycopg2://postgres:{password}@{host}:{port}/postgres".format(username='root', password=channelsConf['postgres']['pwd'], host=channelsConf['postgres']['host'], port=channelsConf['postgres']['port'])
     db = create_engine(db_string)
     metadata = MetaData(schema="pwm")
@@ -980,7 +1073,12 @@ def add_to_db_list(list_id, list_name, items, list_items):
                 condition = list_names_table.c.id == list_id
             else:
                 condition = list_names_table.c.listName == list_name
-            select_st = select([list_names_table]).where(condition)
+            select_st = select([list_names_table]).where(
+                and_(
+                    condition,
+                    list_names_table.c.guild_id == guild_id
+                )
+            )
             res = conn.execute(select_st)
             list = [{column: value for column, value in rowproxy.items()} for rowproxy in res][0]
 
@@ -989,12 +1087,20 @@ def add_to_db_list(list_id, list_name, items, list_items):
             select_st = select([list_items_table]).order_by(list_items_table.c.position.asc())
             lowest_position_number = 0
             for item in items.split(","):
-                insert_statement = list_items_table.insert().values(itemName=item.strip(), listID=list['id'], position= lowest_position_number)
+                insert_statement = list_items_table.insert().values(itemName=item.strip(), listID=list['id'], position= lowest_position_number, guild_id=guild_id)
                 conn.execute(insert_statement)
-            select_st = select([list_items_table]).where(list_items_table.c.listID == list['id'])
+            select_st = select([list_items_table]).where(
+                and_(
+                    list_items_table.c.listID == list['id'],
+                    list_names_table.c.guild_id == guild_id
+                )
+            )
             res = conn.execute(select_st)
             for row in res:
-                list_items.append("▫️" + row.itemName)
+                list_items.append({
+                    'id': row.itemID,
+                    'itemName': row.itemName
+                })
             return list
 
     except Exception as err:
