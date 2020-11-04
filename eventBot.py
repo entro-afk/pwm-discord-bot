@@ -787,10 +787,10 @@ def get_id_of_list(list_name):
             select_st = select([list_names_table]).where(list_names_table.c.listName == list_name)
             res = conn.execute(select_st)
             for row in res:
-                question = row[1]
-                question_id = row[0]
+                list_name = row[1]
+                list_id = row[0]
                 break
-            return question_id
+            return list_id
     except Exception as err:
         print(err)
         if conn:
@@ -833,10 +833,13 @@ async def add_new_role(ctx, channel_id, message_id, *args):
 
 @client.command(pass_context=True, name="getlist")
 async def get_list(ctx, *args):
+    nice_list = False
     list_name = None
     list_id = None
     items = []
-    potential_name_or_id = ' '.join(args).split("|")[0]
+    potential_name_or_id = ' '.join(args).split("|")[0].strip()
+    if "|" in args:
+        nice_list = ' '.join(args).split("|")[1].strip().lower() == 'nice'
     if potential_name_or_id.strip().isnumeric():
         list_id = potential_name_or_id
     else:
@@ -844,7 +847,10 @@ async def get_list(ctx, *args):
 
 
     try:
+        list_items = []
         table_list_items = get_table_list_items(list_id, list_name, ctx.guild.id)
+        for item_name in table_list_items:
+            list_items.append("▫️" + item_name['itenName'])
         if list_id:
             list_name = get_list_name_by_id(list_id, ctx.guild.id)
         else:
@@ -855,15 +861,21 @@ async def get_list(ctx, *args):
         max_n = math.ceil(len(table_list_items) / 20)
         while i < max_n:
             begin_num = i * 20
-            embed = Embed(title=f"{list_name}", description=f"List ID#{list_id}" if i == 0 else "Continued", color=0x00ff00)
+            embed = Embed(title=f"{list_name}", description=f"ID#{list_id}" if i == 0 else "Continued", color=0x00ff00)
             item_ids = '\n'.join([str(item_row['id']) for item_row in table_list_items[begin_num:begin_num + 20]])
-            item_texts = '\n'.join([item_row['answer'] for item_row in table_list_items[begin_num:begin_num + 20]])
+            item_texts = '\n'.join([item_row['itenName'] for item_row in table_list_items[begin_num:begin_num + 20]])
             embed.add_field(name='Item ID', value=f"{item_ids}", inline=True)
             embed.add_field(name='Item', value=f"{item_texts}", inline=True)
             embed_sets.append(embed)
             i += 1
-        for embed in embed_sets:
+        if not nice_list:
+            for embed in embed_sets:
+                await ctx.message.channel.send(embed=embed)
+
+        if nice_list:
+            embed = Embed(title=f"{list_name}", description=f"The list:\n" + '\n'.join(list_items), color=0x00ff00)
             await ctx.message.channel.send(embed=embed)
+
     except Exception as err:
         print(err)
 
@@ -972,7 +984,7 @@ def get_table_list_items(list_id, list_name, guild_id):
             for row in res:
                 table_list_items.append({
                     'id': row.itemID,
-                    'answer': row.itemName
+                    'itenName': row.itemName
                 })
 
             return table_list_items
