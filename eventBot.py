@@ -1060,19 +1060,20 @@ async def add_to_list(ctx, *args):
         if list_name.strip().isnumeric():
             list_id = int(list_name.strip())
         list_items = []
-        list = add_to_db_list(list_id, list_name.strip(), items, list_items, ctx.guild.id)
+        _list = add_to_db_list(list_id, list_name.strip(), items, list_items, ctx.guild.id)
         embed_sets = []
         i = 0
         max_n = math.ceil(len(list_items) / 20)
         while i < max_n:
             begin_num = i * 20
-            embed = Embed(title=f"Added to List ID#{list_id}" if i == 0 else "Continued", description=list['listName'], color=0x00ff00)
+            embed = Embed(title=f"Added to List ID#{list_id}" if i == 0 else "Continued", description=_list['listName'], color=0x00ff00)
             list_items_ids = '\n'.join([str(item_row['id']) for item_row in list_items[begin_num:begin_num + 20]])
             list_items_texts = '\n'.join([item_row['itemName'] for item_row in list_items[begin_num:begin_num + 20]])
             embed.add_field(name='Item ID', value=f"{list_items_ids}")
             embed.add_field(name='Item', value=f"{list_items_texts}")
             embed_sets.append(embed)
             i += 1
+
         for embed in embed_sets:
             await ctx.message.channel.send(embed=embed)
 
@@ -1098,18 +1099,18 @@ def add_to_db_list(list_id, list_name, items, list_items, guild_id):
                 )
             )
             res = conn.execute(select_st)
-            list = [{column: value for column, value in rowproxy.items()} for rowproxy in res][0]
+            _list = [{column: value for column, value in rowproxy.items()} for rowproxy in res][0]
 
 
             list_items_table = Table('listItems', metadata, autoload=True, autoload_with=conn)
             select_st = select([list_items_table]).order_by(list_items_table.c.position.asc())
             lowest_position_number = 0
             for item in items.split(","):
-                insert_statement = list_items_table.insert().values(itemName=item.strip(), listID=list['id'], position= lowest_position_number, guild_id=guild_id)
+                insert_statement = list_items_table.insert().values(itemName=item.strip(), listID=_list['id'], position= lowest_position_number, guild_id=guild_id)
                 conn.execute(insert_statement)
             select_st = select([list_items_table]).where(
                 and_(
-                    list_items_table.c.listID == list['id'],
+                    list_items_table.c.listID == _list['id'],
                     list_names_table.c.guild_id == guild_id
                 )
             )
@@ -1119,7 +1120,7 @@ def add_to_db_list(list_id, list_name, items, list_items, guild_id):
                     'id': row.itemID,
                     'itemName': row.itemName
                 })
-            return list
+            return _list
 
     except Exception as err:
         print(err)
