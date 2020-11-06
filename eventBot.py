@@ -925,7 +925,7 @@ async def send_ping_from_list(ctx, *args):
 
     singer = client.get_user(int(re.sub("[^0-9]", "", list_name)))
     for tag in tags_in_list:
-        tag_id = int(re.sub("[^0-9]", "", tag))
+        tag_id = int(re.sub("[^0-9]", "", tag['itemName']))
         ping_receiver = client.get_user(tag_id)
         embed = Embed(title=f"{singer.name} is about to sing", description='Please join us at discord.gg/nQAAEx8',
                       color=0x00ff00)
