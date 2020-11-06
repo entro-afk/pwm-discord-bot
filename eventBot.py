@@ -127,6 +127,11 @@ async def volume(ctx, volume: int):
     ctx.voice_client.source.volume = volume / 100
     await ctx.send("Changed volume to {}%".format(volume))
 
+@client.command('sendmsg')
+async def send_message(ctx, *args):
+    msg = ' '.join(args)
+    ctx.send(msg)
+
 @client.command()
 async def join(ctx, *, channel: discord.VoiceChannel):
     """Joins a voice channel"""
