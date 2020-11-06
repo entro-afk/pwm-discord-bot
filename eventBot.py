@@ -687,11 +687,12 @@ async def get_lists_table(ctx):
 
 
 @client.command(pass_context=True, name="delete")
-@commands.has_any_role('Event Hoster', 'Moderator')
+@commands.has_any_role('Event Hoster', 'Moderator', 'Jiselicious', 'Holy Trinity')
 async def delete_list(ctx, id):
-    list_name = get_list_name_by_id(id)
-    delete_list_by_id(id)
-    if not get_list_name_by_id(id):
+    guild_id = ctx.guild.id
+    list_name = get_list_name_by_id(id, guild_id)
+    delete_list_by_id(id, guild_id)
+    if not get_list_name_by_id(id, guild_id):
         embed = Embed(title=f"List #{id} Deleted:", description=list_name, color=0x00ff00)
         await ctx.message.channel.send(embed=embed)
 
@@ -855,7 +856,7 @@ async def get_list(ctx, *args):
         list_items = []
         table_list_items = get_table_list_items(list_id, list_name, ctx.guild.id)
         for item_name in table_list_items:
-            list_items.append("▫️" + item_name['itenName'])
+            list_items.append("▫️" + item_name['itemName'])
         if list_id:
             list_name = get_list_name_by_id(list_id, ctx.guild.id)
         else:
@@ -868,7 +869,7 @@ async def get_list(ctx, *args):
             begin_num = i * 20
             embed = Embed(title=f"{list_name}", description=f"ID#{list_id}" if i == 0 else "Continued", color=0x00ff00)
             item_ids = '\n'.join([str(item_row['id']) for item_row in table_list_items[begin_num:begin_num + 20]])
-            item_texts = '\n'.join([item_row['itenName'] for item_row in table_list_items[begin_num:begin_num + 20]])
+            item_texts = '\n'.join([item_row['itemName'] for item_row in table_list_items[begin_num:begin_num + 20]])
             embed.add_field(name='Item ID', value=f"{item_ids}", inline=True)
             embed.add_field(name='Item', value=f"{item_texts}", inline=True)
             embed_sets.append(embed)
@@ -989,7 +990,7 @@ def get_table_list_items(list_id, list_name, guild_id):
             for row in res:
                 table_list_items.append({
                     'id': row.itemID,
-                    'itenName': row.itemName
+                    'itemName': row.itemName
                 })
 
             return table_list_items
