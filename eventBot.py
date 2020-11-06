@@ -130,7 +130,7 @@ async def volume(ctx, volume: int):
 @client.command('sendmsg')
 async def send_message(ctx, *args):
     msg = ' '.join(args)
-    ctx.send(msg)
+    await ctx.send(msg)
 
 @client.command()
 async def join(ctx, *, channel: discord.VoiceChannel):
