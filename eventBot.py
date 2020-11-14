@@ -808,7 +808,7 @@ async def add_new_role(ctx, channel_id, message_id, *args):
     description_msg = []
     list_emoji_role_pairs = re.sub('\n', ",", ' '.join(args)).split(",")
     emoji_role_mapping = []
-    channel = client.get_channel(int(channel_id))
+    channel = await client.fetch_channel(int(channel_id))
     for pair in list_emoji_role_pairs:
         emoji_role_pair = pair.strip().split(" ")
         emoji = emoji_role_pair[0].strip()
