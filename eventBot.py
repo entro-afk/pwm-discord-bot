@@ -22,12 +22,13 @@ from gyazo import Api
 from google.cloud import vision
 from sqlalchemy import *
 from sqlalchemy.engine import reflection
-from discord import File, Member, Role, PermissionOverwrite, ChannelType, Embed
+from discord import File, Member, Role, PermissionOverwrite, ChannelType, Embed, TextChannel
 import youtube_dl
 import requests
+import redis
 
 from sshtunnel import SSHTunnelForwarder
-
+redis_client = redis.Redis(host='localhost', port=6379, db=0)
 scopes = ['https://www.googleapis.com/auth/calendar']
 credentials = ServiceAccountCredentials.from_json_keyfile_name(
     'quickstart-1581556685975-8959801fbbb6.json', scopes)  # Your json file here
@@ -216,6 +217,45 @@ async def handle_player_emoji(message, emoji, author):
         elif emoji.name == '⏮':
             await rewind_on_channel(message.embeds[0].url, author.voice.channel, message.guild, message)
             await message.remove_reaction('⏮', author)
+
+
+@client.event
+async def on_voice_state_update(member, prev, cur):
+    assigned_voice_logs_channel = get_channel_bound_to_purpose(member.guild.id, 'voice-logs')
+
+    if member.id != client.user.id and assigned_voice_logs_channel:
+        now = datetime.datetime.now()
+        log_channel = discord.utils.get(member.guild.text_channels, id=assigned_voice_logs_channel['channel_id'])
+        if cur.channel is not None:
+            redis_client.set(f"{cur.channel.id}:{member.id}", now.strftime('%c'))
+            embed = Embed(title="Voice Channel Joined", description=f"<@!{member.id}> has joined <#{cur.channel.id}>", color=channelsConf['info_color'])
+            await log_channel.send(embed=embed)
+        else:
+            time_joined = redis_client.get(f"{prev.channel.id}:{member.id}")
+            if time_joined:
+                dt_time_joined = datetime.datetime.strptime(time_joined.decode("utf-8"), '%c')
+                diff = now - dt_time_joined
+                if diff.seconds >= 60:
+                    hours = math.floor(diff.seconds/3600)
+                    remain_seconds_from_hours = diff.seconds % 3600
+                    minutes = math.floor(remain_seconds_from_hours/60)
+                    hrs_record_msg = f"{hours} hours"
+                    minutes_record_msg = f"{minutes} minutes"
+                    if hours == 1:
+                        hrs_record_msg = f"{hours} hour"
+                    if minutes == 1:
+                        minutes_record_msg = f"{minutes} minute"
+                    full_record_time_msg = f"{hrs_record_msg} and {minutes_record_msg}"
+                    if not minutes:
+                        full_record_time_msg = hrs_record_msg
+                    if not hours:
+                        full_record_time_msg = minutes_record_msg
+                    embed = Embed(title="Voice Channel Left", description=f"<@!{member.id}> has left <#{prev.channel.id}>. <@!{member.id}> has spent {full_record_time_msg} in <#{prev.channel.id}>", color=channelsConf['info_color'])
+                else:
+                    embed = Embed(title="Voice Channel Left", description=f"<@!{member.id}> has left <#{prev.channel.id}>. <@!{member.id}> has spent a short time in <#{prev.channel.id}>", color=channelsConf['info_color'])
+                await log_channel.send(embed=embed)
+
+
 
 
 @client.event
@@ -836,6 +876,69 @@ async def add_new_role(ctx, channel_id, message_id, *args):
 
     except Exception as err:
         print(err)
+
+@client.command(pass_context=True, name="assignvoicelog")
+async def assign_voice_log_channel(ctx, channel: TextChannel):
+    assigned_channel_db_obj = assign_purpose_to_db(ctx.guild.id, channel.id, 'voice-logs')
+    if assigned_channel_db_obj and assigned_channel_db_obj['channel_id'] == channel.id:
+        await ctx.send(f"Okay successfully mapped voice logs to <#{channel.id}>")
+
+
+def assign_purpose_to_db(guild_id, channel_id, purpose):
+    db_string = "postgres+psycopg2://postgres:{password}@{host}:{port}/postgres".format(username='root', password=channelsConf['postgres']['pwd'], host=channelsConf['postgres']['host'], port=channelsConf['postgres']['port'])
+    db = create_engine(db_string)
+    metadata = MetaData(schema="pwm")
+    gathered_channel_bound = {}
+    try:
+        with db.connect() as conn:
+            participants = []
+            bound_channels_table = Table('guildIDToBoundChannelPurpose', metadata, autoload=True, autoload_with=conn)
+            update_or_insert_channel_query = f"INSERT INTO pwm.\"guildIDToBoundChannelPurpose\" (\"guild_id\", \"purpose\", \"channel_id\") VALUES ({guild_id}, \'{purpose}\', {channel_id}) ON CONFLICT (\"guild_id\", \"purpose\") DO UPDATE SET \"channel_id\" = {channel_id}"
+            result = conn.execute(update_or_insert_channel_query)
+            select_st = select([bound_channels_table]).where(
+                and_(
+                    bound_channels_table.c.purpose == purpose,
+                    bound_channels_table.c.guild_id == guild_id
+                )
+            )
+            res = conn.execute(select_st)
+            for _row in res:
+                return {
+                    'guild_id': _row[0],
+                    'purpose': _row[1],
+                    'channel_id': _row[2],
+                }
+    except Exception as err:
+        print(err)
+        if conn:
+            conn.close()
+        db.dispose()
+
+def get_channel_bound_to_purpose(guild_id, purpose):
+    db_string = "postgres+psycopg2://postgres:{password}@{host}:{port}/postgres".format(username='root', password=channelsConf['postgres']['pwd'], host=channelsConf['postgres']['host'], port=channelsConf['postgres']['port'])
+    db = create_engine(db_string)
+    metadata = MetaData(schema="pwm")
+    try:
+        with db.connect() as conn:
+            bound_channels_table = Table('guildIDToBoundChannelPurpose', metadata, autoload=True, autoload_with=conn)
+            select_st = select([bound_channels_table]).where(
+                and_(
+                    bound_channels_table.c.purpose == purpose,
+                    bound_channels_table.c.guild_id == guild_id
+                )
+            )
+            res = conn.execute(select_st)
+            for _row in res:
+                return {
+                    'guild_id': _row[0],
+                    'purpose': _row[1],
+                    'channel_id': _row[2],
+                }
+    except Exception as err:
+        print(err)
+        if conn:
+            conn.close()
+        db.dispose()
 
 @client.command(pass_context=True, name="getlist")
 async def get_list(ctx, *args):
