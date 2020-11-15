@@ -226,11 +226,7 @@ async def on_voice_state_update(member, prev, cur):
     if member.id != client.user.id and assigned_voice_logs_channel:
         now = datetime.datetime.now()
         log_channel = discord.utils.get(member.guild.text_channels, id=assigned_voice_logs_channel['channel_id'])
-        if cur.channel is not None and prev.channel != cur.channel.id:
-            redis_client.set(f"{cur.channel.id}:{member.id}", now.strftime('%c'))
-            embed = Embed(title="Voice Channel Joined", description=f"<@!{member.id}> has joined <#{cur.channel.id}>", color=channelsConf['info_color'])
-            await log_channel.send(embed=embed)
-        elif cur.channel is None or prev.channel != cur.channel:
+        if cur.channel is None or (prev.channel is not None and prev.channel != cur.channel):
             time_joined = redis_client.get(f"{prev.channel.id}:{member.id}")
             if time_joined:
                 dt_time_joined = datetime.datetime.strptime(time_joined.decode("utf-8"), '%c')
@@ -254,6 +250,10 @@ async def on_voice_state_update(member, prev, cur):
                 else:
                     embed = Embed(title="Voice Channel Left", description=f"<@!{member.id}> has left <#{prev.channel.id}>. <@!{member.id}> has spent a short time in <#{prev.channel.id}>", color=channelsConf['info_color'])
                 await log_channel.send(embed=embed)
+        if cur.channel is not None and prev.channel != cur.channel.id:
+            redis_client.set(f"{cur.channel.id}:{member.id}", now.strftime('%c'))
+            embed = Embed(title="Voice Channel Joined", description=f"<@!{member.id}> has joined <#{cur.channel.id}>", color=channelsConf['info_color'])
+            await log_channel.send(embed=embed)
 
 
 
