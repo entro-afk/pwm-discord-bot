@@ -223,7 +223,7 @@ async def handle_player_emoji(message, emoji, author):
 async def on_voice_state_update(member, prev, cur):
     assigned_voice_logs_channel = get_channel_bound_to_purpose(member.guild.id, 'voice-logs')
 
-    if member.id != client.user.id and assigned_voice_logs_channel:
+    if member.id in channelsConf['voice_tracker'] and assigned_voice_logs_channel:
         now = datetime.datetime.now()
         log_channel = discord.utils.get(member.guild.text_channels, id=assigned_voice_logs_channel['channel_id'])
         if cur.channel is None or (prev.channel is not None and prev.channel != cur.channel):
